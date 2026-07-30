@@ -1,0 +1,30 @@
+# Priority-ordered keyword rules (first match wins), applied after
+# self-transfer/reversal/noise detection. direction: credit | debit | any.
+# category values are the portal's terminal labels.
+rules:
+  - {match: [SALARY, SAL CREDIT, PAYROLL, STIPEND], direction: credit,
+     category: "income:salary"}
+  - {match: [INT.PD, INT PD, INTEREST PAID, INT CREDIT, SB INT, SAVING
+        INTEREST, INTEREST CAPITALISED, FD INT, RD INT], direction: credit,
+     category: "income:other_sources:interest"}
+  - {match: [DIVIDEND, DIV WARRANT, ACH DIVIDEND], direction: credit,
+     category: "income:other_sources:dividend"}
+  - {match: [RENT], direction: credit,
+     category: "income:house_property"}
+  - {match: [ZERODHA, GROWW, UPSTOX, ANGEL ONE, ICCL, INDIAN CLEARING,
+        NSE CLEARING, BSE LIMITED, MUTUAL FUND, MF SIP, SIP DR, NPS TRUST,
+        CAMS, KFINTECH], direction: any,
+     category: "non_income:investment"}
+  - {match: [LIC OF INDIA, LIC PREMIUM, INSURANCE PREM], direction: debit,
+     category: "non_income:personal"}
+  - {match: [CREDIT CARD, CRED CLUB, CC PAYMENT, CARD PMT], direction: debit,
+     category: "non_income:personal"}
+  - {match: [EMI, LOAN INSTAL], direction: debit,
+     category: "non_income:personal"}
+  - {match: [ATM WDL, ATM CASH, CASH WDL, CSH WDL], direction: debit,
+     category: "non_income:personal"}
+  - {match: [POS , SWIGGY, ZOMATO, AMAZON, FLIPKART, BIGBASKET, DMART,
+        RELIANCE RETAIL, MYNTRA], direction: debit,
+     category: "non_income:personal"}
+  - {match: [CASH DEP, CASH DEPOSIT, CDM], direction: credit,
+     category: "flag:cash_deposit"}

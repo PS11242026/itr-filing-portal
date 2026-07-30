@@ -1,0 +1,16 @@
+# Client data, database, uploads, exports — never committed
+data/
+data_backup_*/
+ITR filing data/
+*.log
+
+# Environments and caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+
+# Local secrets (keys live outside the repo in %APPDATA%\itr-portal anyway)
+.streamlit/secrets.toml

@@ -1,0 +1,23 @@
+# SRS test 3: property sold below stamp value → Sec 50C deems 70L;
+# basic-exemption adjustment against LTCG for a no-other-income resident.
+name: property_50c
+verified_against_utility: false     # pinned from hand computation
+inputs:
+  ay: "2026-27"
+  personal: {dob: "1985-06-15", resident_status: Resident}
+  capital_gains:
+    - asset_class: property
+      description: Flat at Andheri
+      acquisition_date: "2015-06-01"
+      transfer_date: "2025-09-15"
+      full_value_consideration: 6000000
+      stamp_duty_value: 7000000
+      cost_of_acquisition: 3000000
+expected:
+  new:
+    total_income: 4000000
+    special_tax: 450000            # (40L − 4L basic) @ 12.5%
+    tax_liability: 468000
+  old:
+    special_tax: 468750            # (40L − 2.5L basic) @ 12.5%
+    tax_liability: 487500

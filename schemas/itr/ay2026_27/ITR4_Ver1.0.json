@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ITR-4 AY 2026-27 (portal-derived placeholder)",
+  "type": "object",
+  "required": ["ITR"],
+  "properties": {
+    "ITR": {
+      "type": "object",
+      "required": ["ITR4"],
+      "properties": {
+        "ITR4": {
+          "type": "object",
+          "required": [
+            "CreationInfo", "Form_ITR4", "PartA_GEN1", "ScheduleBP",
+            "PartB_TI", "PartB_TTI", "Verification"
+          ],
+          "properties": {
+            "Form_ITR4": {
+              "type": "object",
+              "required": ["FormName", "AssessmentYear", "SchemaVer"],
+              "properties": {
+                "FormName": {"const": "ITR-4"},
+                "AssessmentYear": {"const": "2026"},
+                "SchemaVer": {"type": "string"}
+              }
+            },
+            "PartA_GEN1": {
+              "type": "object",
+              "required": ["PersonalInfo"],
+              "properties": {
+                "PersonalInfo": {
+                  "type": "object",
+                  "required": ["PAN"],
+                  "properties": {
+                    "PAN": {"type": "string",
+                            "pattern": "^[A-Z]{5}[0-9]{4}[A-Z]$"}
+                  }
+                }
+              }
+            },
+            "ScheduleBP": {
+              "type": "object",
+              "required": ["IncChargeableUnderBP"],
+              "properties": {
+                "IncChargeableUnderBP": {"type": "integer"}
+              }
+            },
+            "PartB_TI": {
+              "type": "object",
+              "required": ["GrossTotalIncome", "TotalIncome",
+                           "ProfBusinessGain"],
+              "properties": {
+                "GrossTotalIncome": {"type": "integer"},
+                "TotalIncome": {"type": "integer"},
+                "ProfBusinessGain": {"type": "integer"}
+              }
+            },
+            "PartB_TTI": {
+              "type": "object",
+              "required": ["ComputationOfTaxLiability", "TaxPaid"]
+            },
+            "Verification": {
+              "type": "object",
+              "required": ["Declaration"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

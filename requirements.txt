@@ -1,0 +1,15 @@
+streamlit==1.59.*
+pandas==3.0.*
+pdfplumber~=0.11
+pypdf[crypto]~=6.0
+openpyxl~=3.1
+xlrd~=2.0
+XlsxWriter~=3.2
+fpdf2~=2.8
+cryptography>=43.0
+jsonschema~=4.25
+PyYAML~=6.0
+rapidfuzz~=3.13
+python-dateutil~=2.9
+lxml>=5.0
+selenium>=4.20

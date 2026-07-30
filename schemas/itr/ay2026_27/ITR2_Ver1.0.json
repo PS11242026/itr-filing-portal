@@ -1,0 +1,357 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "ITR-2 AY 2026-27 (portal-derived placeholder)",
+ "type": "object",
+ "required": [
+  "ITR"
+ ],
+ "properties": {
+  "ITR": {
+   "type": "object",
+   "required": [
+    "ITR2"
+   ],
+   "properties": {
+    "ITR2": {
+     "type": "object",
+     "required": [
+      "CreationInfo",
+      "Form_ITR2",
+      "PartA_GEN1",
+      "PartB_TI",
+      "PartB_TTI",
+      "Verification"
+     ],
+     "properties": {
+      "CreationInfo": {
+       "type": "object"
+      },
+      "Form_ITR2": {
+       "type": "object",
+       "required": [
+        "FormName",
+        "AssessmentYear",
+        "SchemaVer"
+       ],
+       "properties": {
+        "FormName": {
+         "const": "ITR-2"
+        },
+        "AssessmentYear": {
+         "const": "2026"
+        },
+        "SchemaVer": {
+         "type": "string"
+        }
+       }
+      },
+      "PartA_GEN1": {
+       "type": "object",
+       "required": [
+        "PersonalInfo",
+        "FilingStatus"
+       ],
+       "properties": {
+        "PersonalInfo": {
+         "type": "object",
+         "required": [
+          "AssesseeName",
+          "PAN",
+          "DOB"
+         ],
+         "properties": {
+          "PAN": {
+           "type": "string",
+           "pattern": "^[A-Z]{5}[0-9]{4}[A-Z]$"
+          },
+          "DOB": {
+           "type": "string",
+           "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+         }
+        },
+        "FilingStatus": {
+         "type": "object",
+         "required": [
+          "ReturnFileSec",
+          "NewTaxRegime"
+         ],
+         "properties": {
+          "ReturnFileSec": {
+           "type": "integer"
+          },
+          "NewTaxRegime": {
+           "enum": [
+            "Y",
+            "N"
+           ]
+          }
+         }
+        }
+       }
+      },
+      "ScheduleS": {
+       "type": "object"
+      },
+      "ScheduleHP": {
+       "type": "object"
+      },
+      "ScheduleCG": {
+       "type": "object"
+      },
+      "ScheduleOS": {
+       "type": "object"
+      },
+      "ScheduleVIA": {
+       "type": "object"
+      },
+      "ScheduleSI": {
+       "type": "object",
+       "properties": {
+        "SplCodeRateTax": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "SecCode": {
+            "type": "string"
+           },
+           "SplRateInc": {
+            "type": "integer"
+           },
+           "SplRateIncTax": {
+            "type": "integer"
+           }
+          }
+         }
+        }
+       }
+      },
+      "ScheduleCFL": {
+       "type": "object"
+      },
+      "ScheduleTDS": {
+       "type": "object"
+      },
+      "ScheduleIT": {
+       "type": "object"
+      },
+      "PartB_TI": {
+       "type": "object",
+       "required": [
+        "GrossTotalIncome",
+        "TotalIncome"
+       ],
+       "properties": {
+        "Salaries": {
+         "type": "integer"
+        },
+        "IncomeFromHP": {
+         "type": "integer"
+        },
+        "CapGain": {
+         "type": "object",
+         "properties": {
+          "ShortTermCapGainTotal": {
+           "type": "integer"
+          },
+          "LongTermCapGainTotal": {
+           "type": "integer"
+          },
+          "CapGainTotal": {
+           "type": "integer"
+          }
+         }
+        },
+        "IncFromOS": {
+         "type": "integer"
+        },
+        "GrossTotalIncome": {
+         "type": "integer"
+        },
+        "DeductionsUnderScheduleVIA": {
+         "type": "integer"
+        },
+        "TotalIncome": {
+         "type": "integer"
+        },
+        "IncChargeableTaxSplRates": {
+         "type": "integer"
+        }
+       }
+      },
+      "PartB_TTI": {
+       "type": "object",
+       "required": [
+        "ComputationOfTaxLiability",
+        "TaxPaid"
+       ],
+       "properties": {
+        "ComputationOfTaxLiability": {
+         "type": "object",
+         "properties": {
+          "TaxAtNormalRatesOnAggrInc": {
+           "type": "integer"
+          },
+          "TaxAtSpecialRates": {
+           "type": "integer"
+          },
+          "Rebate87A": {
+           "type": "integer"
+          },
+          "TaxPayableAfterRebate": {
+           "type": "integer"
+          },
+          "Surcharge": {
+           "type": "integer"
+          },
+          "MarginalRelief": {
+           "type": "integer"
+          },
+          "EducationCess": {
+           "type": "integer"
+          },
+          "GrossTaxLiability": {
+           "type": "integer"
+          },
+          "NetTaxLiability": {
+           "type": "integer"
+          },
+          "IntrstPay": {
+           "type": "object",
+           "properties": {
+            "IntrstPayUs234A": {
+             "type": "integer"
+            },
+            "IntrstPayUs234B": {
+             "type": "integer"
+            },
+            "IntrstPayUs234C": {
+             "type": "integer"
+            },
+            "LateFilingFee234F": {
+             "type": "integer"
+            }
+           }
+          },
+          "AggregateTaxInterestLiability": {
+           "type": "integer"
+          }
+         }
+        },
+        "TaxPaid": {
+         "type": "object",
+         "properties": {
+          "TaxesPaid": {
+           "type": "object",
+           "properties": {
+            "AdvanceTax": {
+             "type": "integer"
+            },
+            "TDS": {
+             "type": "integer"
+            },
+            "TCS": {
+             "type": "integer"
+            },
+            "SelfAssessmentTax": {
+             "type": "integer"
+            },
+            "TotalTaxesPaid": {
+             "type": "integer"
+            }
+           }
+          },
+          "BalTaxPayable": {
+           "type": "integer"
+          }
+         }
+        },
+        "Refund": {
+         "type": "object",
+         "properties": {
+          "RefundDue": {
+           "type": "integer"
+          },
+          "BankAccountDtls": {
+           "type": "object"
+          }
+         }
+        }
+       }
+      },
+      "Verification": {
+       "type": "object",
+       "required": [
+        "Declaration",
+        "Place",
+        "Date"
+       ],
+       "properties": {
+        "Declaration": {
+         "type": "object",
+         "required": [
+          "AssesseeVerName",
+          "AssesseeVerPAN"
+         ],
+         "properties": {
+          "AssesseeVerPAN": {
+           "type": "string",
+           "pattern": "^[A-Z]{5}[0-9]{4}[A-Z]$"
+          }
+         }
+        },
+        "Place": {
+         "type": "string"
+        },
+        "Date": {
+         "type": "string",
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
+       }
+      },
+      "ScheduleEI": {
+       "type": "object",
+       "properties": {
+        "InterestInc": {
+         "type": "integer"
+        },
+        "GrossAgriRecpt": {
+         "type": "integer"
+        },
+        "NetAgriIncOrOthrIncRule7": {
+         "type": "integer"
+        },
+        "OthersInc": {
+         "type": "object",
+         "properties": {
+          "OthersIncDtls": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "NatureDesc": {
+              "type": "string"
+             },
+             "OthNatOfInc": {
+              "type": "string"
+             },
+             "OthAmount": {
+              "type": "integer"
+             }
+            }
+           }
+          }
+         }
+        },
+        "TotalExemptInc": {
+         "type": "integer"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}

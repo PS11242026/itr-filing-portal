@@ -1,0 +1,182 @@
+# AY 2026-27 (FY 2025-26) statutory configuration.
+# SEED VALUES per Finance Act 2025 — Pulkit verifies each figure against the
+# Act / ITD utility before golden tests are trusted. The engine contains no
+# statutory literals; changing this file (plus golden re-verification) is how
+# a new AY or amendment ships.
+
+ay: "2026-27"
+fy: "2025-26"
+fy_start: "2025-04-01"
+fy_end: "2026-03-31"
+cg_regime_cutoff: "2024-07-23"     # FA (No.2) 2024 rate switch — all FY 2025-26
+                                   # transfers are post-cutoff
+due_date: "2026-07-31"             # non-audit individuals; update if extended
+
+cess_rate: 4
+
+new_regime:
+  standard_deduction_salary: 75000
+  family_pension_deduction_cap: 25000
+  slabs:
+    - {upto: 400000,  rate: 0}
+    - {upto: 800000,  rate: 5}
+    - {upto: 1200000, rate: 10}
+    - {upto: 1600000, rate: 15}
+    - {upto: 2000000, rate: 20}
+    - {upto: 2400000, rate: 25}
+    - {upto: null,    rate: 30}
+  rebate_87a:
+    ti_limit: 1200000
+    max_rebate: 60000
+    marginal_relief: true
+    slab_tax_only: true            # FA 2025: rebate only against normal-rate tax
+  surcharge:
+    - {above: 5000000,  rate: 10}
+    - {above: 10000000, rate: 15}
+    - {above: 20000000, rate: 25}
+  surcharge_cap_special_income: 15  # on 111A/112/112A + dividend
+  allowed_deductions: ["80CCD(2)", "80CCH", "80JJAA"]
+  hp_loss_setoff_against_other_heads: false
+  sop_interest_allowed: false
+
+old_regime:
+  standard_deduction_salary: 50000
+  entertainment_allowance_cap: 5000   # 16(ii) govt employees; least-of rule
+  family_pension_deduction_cap: 15000
+  slabs_general:
+    - {upto: 250000,  rate: 0}
+    - {upto: 500000,  rate: 5}
+    - {upto: 1000000, rate: 20}
+    - {upto: null,    rate: 30}
+  slabs_senior:                     # 60–79 at any time in the FY
+    - {upto: 300000,  rate: 0}
+    - {upto: 500000,  rate: 5}
+    - {upto: 1000000, rate: 20}
+    - {upto: null,    rate: 30}
+  slabs_super_senior:               # 80+
+    - {upto: 500000,  rate: 0}
+    - {upto: 1000000, rate: 20}
+    - {upto: null,    rate: 30}
+  rebate_87a:
+    ti_limit: 500000
+    max_rebate: 12500
+    marginal_relief: false
+    slab_tax_only: false            # available against 111A too; never 112A
+  surcharge:
+    - {above: 5000000,  rate: 10}
+    - {above: 10000000, rate: 15}
+    - {above: 20000000, rate: 25}
+    - {above: 50000000, rate: 37}
+  surcharge_cap_special_income: 15
+  hp_loss_setoff_cap: 200000
+
+house_property:
+  standard_deduction_pct: 30
+  sop_interest_cap: 200000
+  max_self_occupied: 2
+
+capital_gains:
+  stcg_111a_rate: 20
+  ltcg_112a_rate: 12.5
+  ltcg_112a_exemption: 125000
+  ltcg_112_rate: 12.5              # unindexed, post-cutoff
+  property_grandfather_indexed_rate: 20   # resident option, acquired pre-cutoff
+  grandfather_112a_date: "2018-01-31"
+  holding_months:
+    listed_equity_stt: 12
+    equity_mf: 12
+    listed_other: 12
+    property: 24
+    unlisted: 24
+    other: 24
+  sec50c_tolerance_pct: 110        # SDV deemed only if > 110% of consideration
+  cii:                             # cost inflation index (base 2001-02 = 100)
+    "2001-02": 100
+    "2002-03": 105
+    "2003-04": 109
+    "2004-05": 113
+    "2005-06": 117
+    "2006-07": 122
+    "2007-08": 129
+    "2008-09": 137
+    "2009-10": 148
+    "2010-11": 167
+    "2011-12": 184
+    "2012-13": 200
+    "2013-14": 220
+    "2014-15": 240
+    "2015-16": 254
+    "2016-17": 264
+    "2017-18": 272
+    "2018-19": 280
+    "2019-20": 289
+    "2020-21": 301
+    "2021-22": 317
+    "2022-23": 331
+    "2023-24": 348
+    "2024-25": 363
+    "2025-26": 376                 # VERIFY against CBDT notification
+
+gifts_56_2x:
+  threshold: 50000
+
+presumptive:                       # PGBP presumptive schemes — VERIFY limits
+  s44ad:
+    rate_digital: 6                # % of receipts via bank/digital modes
+    rate_cash: 8                   # % of cash receipts
+    turnover_limit: 20000000       # ₹2 cr
+    turnover_limit_low_cash: 30000000   # ₹3 cr if cash receipts ≤ 5%
+  s44ada:
+    rate: 50                       # % of professional gross receipts
+    receipts_limit: 5000000        # ₹50 lakh
+    receipts_limit_low_cash: 7500000    # ₹75 lakh if cash receipts ≤ 5%
+  s44ae:
+    heavy_per_ton_month: 1000      # >12MT goods vehicle: ₹1,000 per ton/month
+    other_per_vehicle_month: 7500  # other goods vehicle: ₹7,500/vehicle/month
+
+clubbing:
+  minor_exemption_per_child: 1500  # Sec 10(32), per minor child clubbed
+
+exempt_income:                     # Schedule EI (reported, never taxed)
+  agri_integration_threshold: 5000 # net agri income above this → partial
+                                   # integration for rate purposes (both
+                                   # regimes, Finance Act mechanism)
+  itr1_agri_limit: 5000            # agri income above this bars ITR-1/4
+
+deductions:                        # Chapter VI-A caps; absent cap = as claimed
+  "80C":        {cap: 150000, group: "80CCE"}
+  "80CCC":      {cap: 150000, group: "80CCE"}
+  "80CCD(1)":   {cap: 150000, group: "80CCE"}
+  "80CCE_group_cap": 150000
+  "80CCD(1B)":  {cap: 50000}
+  "80CCD(2)":   {cap: null}        # employer NPS; % of salary check is manual
+  "80CCH":      {cap: null}
+  "80D":        {cap: 100000}      # detailed self/parents split checked by staff
+  "80DD":       {cap: 125000}
+  "80DDB":      {cap: 140000}
+  "80E":        {cap: null}
+  "80EE":       {cap: 50000}
+  "80EEA":      {cap: 150000}
+  "80G":        {cap: null}        # eligible amount entered after 10% GTI check
+  "80GG":       {cap: 60000}
+  "80TTA":      {cap: 10000, senior: false}
+  "80TTB":      {cap: 50000, senior: true}
+  "80U":        {cap: 125000}
+  "80JJAA":     {cap: null}
+
+interest:
+  advance_tax_threshold: 10000
+  rate_pm_234a: 1
+  rate_pm_234b: 1
+  rate_pm_234c: 1
+  s234c_schedule:                  # cumulative % of assessed tax due
+    - {by: "2025-06-15", pct: 15, grace_pct: 12}
+    - {by: "2025-09-15", pct: 45, grace_pct: 36}
+    - {by: "2025-12-15", pct: 75, grace_pct: 75}
+    - {by: "2026-03-15", pct: 100, grace_pct: 100}
+  senior_no_advance_tax_without_business: true
+
+late_fee_234f:
+  amount: 5000
+  small_ti_limit: 500000
+  small_amount: 1000

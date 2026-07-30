@@ -1,0 +1,101 @@
+# Required-documents checklist. Items apply "always" or when the named
+# profile flag is set on the taxpayer (set during onboarding).
+# doc_types are the upload tags that satisfy the item.
+items:
+  - key: bank_statements
+    label: Bank statements for every account, covering the full financial year
+    applies: always
+    doc_types: [bank_statement]
+    help: CSV or Excel from netbanking preferred; PDF accepted.
+
+  - key: form26as
+    label: Form 26AS (TRACES)
+    applies: always
+    doc_types: [form26as]
+    help: Download from TRACES via the e-filing portal (text/CSV preferred).
+
+  - key: ais_json
+    label: AIS export from the e-filing portal (JSON)
+    applies: always
+    doc_types: [ais_json]
+    help: e-filing portal → AIS → download JSON.
+
+  - key: prefill_json
+    label: Pre-filled ITR JSON from the e-filing portal
+    applies: always
+    required: false
+    doc_types: [prefill_json]
+    help: Staff can also download this; speeds up personal-details entry.
+
+  - key: form16
+    label: Form 16 from every employer in the year
+    applies: has_salary
+    doc_types: [form16]
+
+  - key: rent_agreement
+    label: Rent agreement and tenant details for let-out property
+    applies: has_let_out_property
+    doc_types: [rent_agreement]
+
+  - key: home_loan_certificate
+    label: Home-loan interest certificate (Section 24(b))
+    applies: has_home_loan
+    doc_types: [home_loan_certificate]
+
+  - key: sale_deed
+    label: Sale deed for property sold during the year
+    applies: has_property_sale
+    doc_types: [sale_deed]
+
+  - key: purchase_deed
+    label: Purchase deed / cost records for the property sold
+    applies: has_property_sale
+    doc_types: [purchase_deed]
+
+  - key: stamp_valuation
+    label: Stamp-duty valuation / registry document (Section 50C)
+    applies: has_property_sale
+    doc_types: [stamp_valuation]
+
+  - key: broker_statement
+    label: Broker / mutual-fund capital-gains statement
+    applies: has_securities_cg
+    doc_types: [broker_statement]
+
+  - key: gift_documentation
+    label: Gift deed / donor details for gifts received
+    applies: has_gifts
+    doc_types: [gift_document]
+    help: Donor name, relationship and amount — Section 56(2)(x).
+
+  - key: deduction_proofs
+    label: Chapter VI-A proofs (LIC, PPF, ELSS, tuition, mediclaim, donations)
+    applies: wants_old_regime
+    doc_types: [deduction_proof]
+
+  - key: interest_certificates
+    label: Bank/post-office interest certificates
+    applies: always
+    required: false
+    doc_types: [interest_certificate]
+
+  - key: business_44ad_summary
+    label: Business turnover summary — digital vs cash receipts (Sec 44AD)
+    applies: has_business_44ad
+    doc_types: [business_receipts]
+    help: Split of receipts by mode; presumptive rate is 6% digital / 8% cash.
+
+  - key: profession_44ada_summary
+    label: Professional gross-receipts summary (Sec 44ADA)
+    applies: has_profession_44ada
+    doc_types: [business_receipts]
+
+  - key: goods_carriage_register
+    label: Goods-carriage register — tonnage and months held (Sec 44AE)
+    applies: has_goods_carriage_44ae
+    doc_types: [vehicle_register]
+
+  - key: books_of_accounts
+    label: Books of accounts — P&L and balance sheet (regular books)
+    applies: has_business_books
+    doc_types: [books_of_accounts]

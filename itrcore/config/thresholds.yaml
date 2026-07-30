@@ -1,0 +1,29 @@
+# Analysis-engine thresholds (materiality & pattern tuning). Staff-editable.
+recurrence:
+  min_occurrences: 3
+  amount_tolerance_pct: 10
+  monthly_gap_days: [26, 35]
+  min_fraction_in_gap: 0.7
+
+salary:
+  min_amount_inr: 15000
+  keywords: [SAL, SALARY, PAYROLL, STIPEND, WAGES]
+
+self_transfer:
+  date_window_days: 3
+
+reversal:
+  date_window_days: 7
+
+flags:
+  large_credit_inr: 200000          # one-off credits at/above this get queried
+  cash_deposit_inr: 50000           # single cash deposit query threshold
+  gift_like_min_inr: 50000          # Sec 56(2)(x) screening floor
+  small_noise_inr: 1000             # fee-ish narrations at/below this are noise
+
+noise_keywords: [CHRG, CHARGES, SMS CHG, AMC, MIN BAL, MAB, GST, FEE,
+                 CONSOLIDATED CHARGES, ANNUAL FEE]
+
+recon:
+  tds_tolerance_inr: 1              # per-TAN TDS match tolerance
+  ais_tolerance_inr: 100            # AIS category vs books tolerance

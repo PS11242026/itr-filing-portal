@@ -1,0 +1,21 @@
+# Local-only deployment. To share on the office LAN, change server.address
+# to the machine's LAN IP (e.g. "192.168.1.20") and keep the firewall rule
+# restricted to the office subnet.
+[server]
+address = "localhost"
+port = 8511
+maxUploadSize = 50
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "viewer"
+
+[theme]
+base = "dark"
+primaryColor = "#4dabf7"
+backgroundColor = "#0e1117"
+secondaryBackgroundColor = "#161b22"
+textColor = "#e6edf3"

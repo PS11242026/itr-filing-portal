@@ -1,0 +1,19 @@
+# Simple salaried case: 12L gross, new-regime rebate wipes the tax.
+name: salary_12l_rebate
+verified_against_utility: false     # pinned from hand computation
+inputs:
+  ay: "2026-27"
+  personal: {dob: "1990-05-10", resident_status: Resident}
+  salaries:
+    - {employer_name: Acme Ltd, employer_tan: MUMA12345B,
+       gross_salary: 1200000, exempt_allowances: 0, prof_tax: 0}
+expected:
+  new:
+    total_income: 1125000
+    slab_tax: 52500
+    rebate_87a: 52500
+    tax_liability: 0
+    payable_or_refund: 0
+  old:
+    total_income: 1150000
+    tax_liability: 163800

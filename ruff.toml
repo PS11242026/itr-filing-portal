@@ -1,0 +1,11 @@
+line-length = 79
+target-version = "py313"
+
+[lint]
+select = ["E", "F", "W"]
+
+[lint.per-file-ignores]
+# Pages intentionally run guard.page() before their imports (enforced by
+# tests/unit/test_enforcement.py), and scripts adjust sys.path first.
+"app_pages/**" = ["E402"]
+"scripts/**" = ["E402"]

@@ -1,0 +1,544 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "ITR-1 AY 2026-27 (portal-derived placeholder)",
+ "type": "object",
+ "required": [
+  "ITR"
+ ],
+ "properties": {
+  "ITR": {
+   "type": "object",
+   "required": [
+    "ITR1"
+   ],
+   "properties": {
+    "ITR1": {
+     "type": "object",
+     "required": [
+      "CreationInfo",
+      "Form_ITR1",
+      "PersonalInfo",
+      "FilingStatus",
+      "ITR1_IncomeDeductions",
+      "ITR1_TaxComputation",
+      "TaxPaid",
+      "Refund",
+      "Verification"
+     ],
+     "properties": {
+      "CreationInfo": {
+       "type": "object",
+       "required": [
+        "SWVersionNo",
+        "SWCreatedBy",
+        "JSONCreationDate"
+       ],
+       "properties": {
+        "SWVersionNo": {
+         "type": "string"
+        },
+        "SWCreatedBy": {
+         "type": "string"
+        },
+        "JSONCreationDate": {
+         "type": "string",
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "JSONCreatedBy": {
+         "type": "string"
+        },
+        "IntermediaryCity": {
+         "type": "string"
+        },
+        "Digest": {
+         "type": "string"
+        }
+       }
+      },
+      "Form_ITR1": {
+       "type": "object",
+       "required": [
+        "FormName",
+        "AssessmentYear",
+        "SchemaVer"
+       ],
+       "properties": {
+        "FormName": {
+         "const": "ITR-1"
+        },
+        "Description": {
+         "type": "string"
+        },
+        "AssessmentYear": {
+         "const": "2026"
+        },
+        "SchemaVer": {
+         "type": "string"
+        },
+        "FormVer": {
+         "type": "string"
+        }
+       }
+      },
+      "PersonalInfo": {
+       "type": "object",
+       "required": [
+        "AssesseeName",
+        "PAN",
+        "DOB"
+       ],
+       "properties": {
+        "AssesseeName": {
+         "type": "object",
+         "required": [
+          "SurNameOrOrgName"
+         ],
+         "properties": {
+          "FirstName": {
+           "type": "string"
+          },
+          "MiddleName": {
+           "type": "string"
+          },
+          "SurNameOrOrgName": {
+           "type": "string"
+          }
+         }
+        },
+        "PAN": {
+         "type": "string",
+         "pattern": "^[A-Z]{5}[0-9]{4}[A-Z]$"
+        },
+        "DOB": {
+         "type": "string",
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "AadhaarCardNo": {
+         "type": "string"
+        },
+        "EmployerCategory": {
+         "type": "string"
+        },
+        "Address": {
+         "type": "object",
+         "properties": {
+          "ResidenceNo": {
+           "type": "string"
+          },
+          "LocalityOrArea": {
+           "type": "string"
+          },
+          "CityOrTownOrDistrict": {
+           "type": "string"
+          },
+          "StateCode": {
+           "type": "string"
+          },
+          "CountryCode": {
+           "type": "string"
+          },
+          "PinCode": {
+           "type": "string"
+          },
+          "EmailAddress": {
+           "type": "string"
+          },
+          "MobileNo": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      },
+      "FilingStatus": {
+       "type": "object",
+       "required": [
+        "ReturnFileSec",
+        "NewTaxRegime"
+       ],
+       "properties": {
+        "ReturnFileSec": {
+         "type": "integer"
+        },
+        "NewTaxRegime": {
+         "enum": [
+          "Y",
+          "N"
+         ]
+        },
+        "SeventhProvisio139": {
+         "enum": [
+          "Y",
+          "N"
+         ]
+        }
+       }
+      },
+      "ITR1_IncomeDeductions": {
+       "type": "object",
+       "required": [
+        "GrossTotIncome",
+        "TotalIncome"
+       ],
+       "properties": {
+        "GrossSalary": {
+         "type": "integer"
+        },
+        "ExemptAllwnceUs10": {
+         "type": "integer"
+        },
+        "NetSalary": {
+         "type": "integer"
+        },
+        "DeductionUs16": {
+         "type": "integer"
+        },
+        "DeductionUs16ia": {
+         "type": "integer"
+        },
+        "ProfessionalTaxUs16iii": {
+         "type": "integer"
+        },
+        "IncomeFromSal": {
+         "type": "integer"
+        },
+        "TypeOfHP": {
+         "enum": [
+          "S",
+          "L",
+          ""
+         ]
+        },
+        "GrossRentReceived": {
+         "type": "integer"
+        },
+        "TaxPaidlocalAuth": {
+         "type": "integer"
+        },
+        "AnnualValue": {
+         "type": "integer"
+        },
+        "StandardDeduction": {
+         "type": "integer"
+        },
+        "InterestPayable": {
+         "type": "integer"
+        },
+        "TotalIncomeOfHP": {
+         "type": "integer"
+        },
+        "LongTermCapGain112A": {
+         "type": "integer"
+        },
+        "IncomeOthSrc": {
+         "type": "integer"
+        },
+        "DeductionUs57iia": {
+         "type": "integer"
+        },
+        "GrossTotIncome": {
+         "type": "integer"
+        },
+        "UsrDeductUndChapVIA": {
+         "type": "object",
+         "properties": {
+          "TotalChapVIADeductions": {
+           "type": "integer"
+          }
+         },
+         "additionalProperties": {
+          "type": "integer"
+         }
+        },
+        "DeductUndChapVIA": {
+         "type": "object",
+         "properties": {
+          "TotalChapVIADeductions": {
+           "type": "integer"
+          }
+         },
+         "additionalProperties": {
+          "type": "integer"
+         }
+        },
+        "TotalIncome": {
+         "type": "integer"
+        },
+        "ExemptIncAgriOthUs10": {
+         "type": "integer"
+        },
+        "ExemptIncAgriOthUs10Dtls": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "NatureDesc": {
+            "type": "string"
+           },
+           "OthNatOfInc": {
+            "type": "string"
+           },
+           "OthAmount": {
+            "type": "integer"
+           }
+          }
+         }
+        }
+       }
+      },
+      "ITR1_TaxComputation": {
+       "type": "object",
+       "required": [
+        "TotalTaxPayable",
+        "NetTaxLiability"
+       ],
+       "properties": {
+        "TotalTaxPayable": {
+         "type": "integer"
+        },
+        "Rebate87A": {
+         "type": "integer"
+        },
+        "TaxPayableOnRebate": {
+         "type": "integer"
+        },
+        "EducationCess": {
+         "type": "integer"
+        },
+        "GrossTaxLiability": {
+         "type": "integer"
+        },
+        "Section89": {
+         "type": "integer"
+        },
+        "NetTaxLiability": {
+         "type": "integer"
+        },
+        "TotalIntrstPay": {
+         "type": "integer"
+        },
+        "IntrstPay": {
+         "type": "object",
+         "properties": {
+          "IntrstPayUs234A": {
+           "type": "integer"
+          },
+          "IntrstPayUs234B": {
+           "type": "integer"
+          },
+          "IntrstPayUs234C": {
+           "type": "integer"
+          },
+          "LateFilingFee234F": {
+           "type": "integer"
+          }
+         }
+        },
+        "TotTaxPlusIntrstPay": {
+         "type": "integer"
+        }
+       }
+      },
+      "TaxPaid": {
+       "type": "object",
+       "required": [
+        "TaxesPaid"
+       ],
+       "properties": {
+        "TaxesPaid": {
+         "type": "object",
+         "properties": {
+          "AdvanceTax": {
+           "type": "integer"
+          },
+          "TDS": {
+           "type": "integer"
+          },
+          "TCS": {
+           "type": "integer"
+          },
+          "SelfAssessmentTax": {
+           "type": "integer"
+          },
+          "TotalTaxesPaid": {
+           "type": "integer"
+          }
+         }
+        },
+        "BalTaxPayable": {
+         "type": "integer"
+        }
+       }
+      },
+      "Refund": {
+       "type": "object",
+       "properties": {
+        "RefundDue": {
+         "type": "integer"
+        },
+        "BankAccountDtls": {
+         "type": "object",
+         "properties": {
+          "AddtnlBankDetails": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "IFSCCode": {
+              "type": "string"
+             },
+             "BankName": {
+              "type": "string"
+             },
+             "BankAccountNo": {
+              "type": "string"
+             },
+             "UseForRefund": {
+              "type": "string"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      },
+      "TDSonSalaries": {
+       "type": "object",
+       "properties": {
+        "TotalTDSonSalaries": {
+         "type": "integer"
+        },
+        "TDSonSalary": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "EmployerOrDeductorOrCollectDetl": {
+            "type": "object",
+            "properties": {
+             "TAN": {
+              "type": "string"
+             },
+             "EmployerOrDeductorOrCollecterName": {
+              "type": "string"
+             }
+            }
+           },
+           "IncChrgSal": {
+            "type": "integer"
+           },
+           "TotalTDSSal": {
+            "type": "integer"
+           }
+          }
+         }
+        }
+       }
+      },
+      "TDSonOthThanSals": {
+       "type": "object",
+       "properties": {
+        "TotalTDSonOthThanSals": {
+         "type": "integer"
+        },
+        "TDSonOthThanSal": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "EmployerOrDeductorOrCollectDetl": {
+            "type": "object",
+            "properties": {
+             "TAN": {
+              "type": "string"
+             },
+             "EmployerOrDeductorOrCollecterName": {
+              "type": "string"
+             }
+            }
+           },
+           "AmtForTaxDeduct": {
+            "type": "integer"
+           },
+           "ClaimOutOfTotTDSOnAmtPaid": {
+            "type": "integer"
+           }
+          }
+         }
+        }
+       }
+      },
+      "ScheduleIT": {
+       "type": "object",
+       "properties": {
+        "TotalTaxPayments": {
+         "type": "integer"
+        },
+        "TaxPayment": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "BSRCode": {
+            "type": "string"
+           },
+           "DateDep": {
+            "type": "string"
+           },
+           "SrlNoOfChaln": {
+            "type": "string"
+           },
+           "Amt": {
+            "type": "integer"
+           }
+          }
+         }
+        }
+       }
+      },
+      "Verification": {
+       "type": "object",
+       "required": [
+        "Declaration",
+        "Place",
+        "Date"
+       ],
+       "properties": {
+        "Declaration": {
+         "type": "object",
+         "required": [
+          "AssesseeVerName",
+          "AssesseeVerPAN"
+         ],
+         "properties": {
+          "AssesseeVerName": {
+           "type": "string"
+          },
+          "FatherName": {
+           "type": "string"
+          },
+          "AssesseeVerPAN": {
+           "type": "string",
+           "pattern": "^[A-Z]{5}[0-9]{4}[A-Z]$"
+          }
+         }
+        },
+        "Capacity": {
+         "type": "string"
+        },
+        "Place": {
+         "type": "string"
+        },
+        "Date": {
+         "type": "string",
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}
