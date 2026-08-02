@@ -50,6 +50,12 @@ class CGEntry:
     fmv_31jan2018: int | None = None           # 112A grandfathering
     exemption_claimed: int = 0                 # 54/54EC/54F etc. (validated
     exemption_section: str = ""                # by staff with proofs)
+    # Buyer/transferee particulars — Schedule CG requires them for
+    # immovable property (and the practitioner statement prints them).
+    buyer_name: str = ""
+    buyer_pan: str = ""
+    buyer_address: str = ""
+    buyer_share_pct: float = 100.0
     # "short"/"long": the ST/LT determination reported WITH the data (the
     # AIS SFT detail's Asset Type, or the Genius sheet's declared column)
     # for rows whose acquisition date is not yet on file. Dates, when
@@ -84,6 +90,12 @@ class RegularBusiness:
     disallowances: int = 0             # add back 40 / 40A(3) / 43B etc.
     other_additions: int = 0
     other_deductions: int = 0
+    # Speculation business (Sec 43(5)) — intra-day equity, and anything the
+    # practitioner marks as speculative. Kept in its own bucket because a
+    # speculation LOSS may be set off only against speculation PROFITS
+    # (Sec 73) and carries forward for four years, not eight.
+    is_speculative: bool = False
+    turnover: int = 0                  # for the speculative P&L statement
 
 
 @dataclass(frozen=True)
@@ -104,6 +116,12 @@ class OtherSources:
     taxable_gifts: int = 0                     # 56(2)(x) — already screened
     other: int = 0
     deductions_57: int = 0                      # expenses to earn OS income
+    # Post Office savings-bank interest is reported separately because it
+    # carries its own exemption — Sec 10(15)(i) r/w Rule 2BBA: ₹3,500 for a
+    # single account, ₹7,000 jointly held. The exemption survives 115BAC,
+    # so the engine claims it under BOTH regimes automatically.
+    post_office_savings_interest: int = 0
+    post_office_joint_account: bool = False
 
 
 @dataclass(frozen=True)
@@ -136,6 +154,8 @@ ADJUSTMENT_TARGETS: dict[str, str] = {
     "house_property": "House property — head total",
     "business": "Business/profession — head total",
     "other_sources.savings_interest": "Other sources — savings interest",
+    "other_sources.post_office_savings_interest":
+        "Other sources — post office savings interest",
     "other_sources.fd_interest": "Other sources — FD/deposit interest",
     "other_sources.dividend": "Other sources — dividend",
     "other_sources.family_pension": "Other sources — family pension",
@@ -163,13 +183,70 @@ class Challan:
     kind: Literal["advance", "self_assessment"] = "advance"
     paid_on: date | None = None
     amount: int = 0
+    reference: str = ""        # "BSR code - challan serial", from 26AS PART-C
+
+
+# Loss kinds that survive into a later year → (label, carry-forward years
+# allowed after the AY of the loss, what it may be set off against later).
+LOSS_KINDS: dict[str, tuple[str, int]] = {
+    "house_property": ("House Property Loss", 8),      # 71B
+    "business": ("Ordinary Business Loss", 8),         # 72
+    "speculation": ("Speculation Business Loss", 4),   # 73
+    "stcl": ("Short Term Capital Loss", 8),            # 74
+    "ltcl": ("Long Term Capital Loss", 8),             # 74
+}
+
+
+@dataclass(frozen=True)
+class BFLossEntry:
+    """One brought-forward loss, as it appears in the losses table: the AY in
+    which it was first determined, its character, and the amount still
+    unabsorbed at the start of this year."""
+
+    ay: str = ""                       # e.g. "2023-24"; blank = age unknown
+    kind: str = "business"             # key of LOSS_KINDS
+    amount: int = 0
 
 
 @dataclass(frozen=True)
 class BroughtForwardLosses:
+    """Legacy flat totals (kept so older saved inputs load unchanged) plus
+    the per-AY rows the losses table and the expiry test need. When
+    ``entries`` is non-empty it is authoritative and the flat fields are
+    ignored."""
+
     hp_loss: int = 0
     stcl: int = 0
     ltcl: int = 0
+    business: int = 0
+    speculation: int = 0
+    entries: tuple[BFLossEntry, ...] = ()
+
+    def rows(self) -> tuple[BFLossEntry, ...]:
+        if self.entries:
+            return tuple(e for e in self.entries if e.amount > 0)
+        flat = (("house_property", self.hp_loss), ("business", self.business),
+                ("speculation", self.speculation), ("stcl", self.stcl),
+                ("ltcl", self.ltcl))
+        return tuple(BFLossEntry(ay="", kind=k, amount=v)
+                     for k, v in flat if v > 0)
+
+
+@dataclass(frozen=True)
+class LossRow:
+    """A line of the losses table: what came in, what was absorbed this year,
+    what goes forward (or lapsed because its carry-forward window closed)."""
+
+    ay: str
+    kind: str
+    brought_forward: int = 0
+    set_off: int = 0
+    carried_forward: int = 0
+    lapsed: int = 0
+
+    @property
+    def label(self) -> str:
+        return LOSS_KINDS.get(self.kind, (self.kind, 0))[0]
 
 
 @dataclass(frozen=True)
@@ -211,19 +288,31 @@ class HeadResult:
 
 @dataclass(frozen=True)
 class CGResult:
+    """Capital gains after intra-head set-off.
+
+    ``ltcg_112a`` is the GROSS 112A gain. The ₹1,25,000 relief in
+    Sec 112A(2) is a rate concession, not an exclusion from total income —
+    the gain stays in GTI and only the excess is taxed at 12.5%. So the
+    threshold is applied by the tax stage, never here."""
+
     head_total: int                  # taxable CG included in GTI
     stcg_slab: int = 0               # taxed at slab (in normal income)
     stcg_111a: int = 0               # 20%
-    ltcg_112a_taxable: int = 0       # 12.5% beyond ₹1.25L exemption
+    ltcg_112a: int = 0               # 12.5% beyond ₹1.25L (applied at tax)
     ltcg_125: int = 0                # 12.5% unindexed bucket
     ltcg_20_indexed: int = 0         # 20% grandfathered-option bucket
     cf_stcl: int = 0
     cf_ltcl: int = 0
     lines: tuple[Line, ...] = ()
+    reco_lines: tuple[Line, ...] = ()   # 20%-indexed vs 12.5%-unindexed
+    # ltcg_112a net of the ₹1.25L rate concession — what Schedule CG reports
+    # as the 112A figure actually bearing tax. Filled by the regime pipeline,
+    # which is the only layer that knows the threshold.
+    ltcg_112a_taxable: int = 0
 
     @property
     def special_total(self) -> int:
-        return (self.stcg_111a + self.ltcg_112a_taxable + self.ltcg_125
+        return (self.stcg_111a + self.ltcg_112a + self.ltcg_125
                 + self.ltcg_20_indexed)
 
 
@@ -259,6 +348,11 @@ class RegimeResult:
     exempt_total: int = 0            # Schedule EI — reported, not in TI
     exempt_lines: tuple[Line, ...] = ()
     slab_lines: tuple[Line, ...] = ()   # band-wise split of slab_tax
+    # Chapter VI set-off / carry-forward (Sec 70–74)
+    setoff_lines: tuple[Line, ...] = ()
+    loss_table: tuple[LossRow, ...] = ()
+    speculation_income: int = 0      # after Sec 73, floored at zero
+    ltcg_112a_gross: int = 0         # before the ₹1.25L rate concession
 
 
 @dataclass(frozen=True)

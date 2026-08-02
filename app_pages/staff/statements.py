@@ -472,8 +472,29 @@ if _ais_saved:
           "Processed value": inr(s["processed_paise"] // 100),
           "Derived value": inr(s["derived_paise"] // 100)}
          for s in doc.tis_summary()]), hide_index=True, width="stretch")
+    # Part B3 is challans, not information blocks — the only pulled source
+    # for advance / self-assessment tax now that the TRACES 26AS carries
+    # neither. Shown with the AY each one discharges, because that is what
+    # decides which computation may credit it.
+    if doc.tax_payments:
+        with st.expander(f"Part B3 · Payment of taxes  "
+                         f"({len(doc.tax_payments)} challans)", expanded=True):
+            st.dataframe(pd.DataFrame(
+                [{"F.Y.": p.fy, "Credited to A.Y.": p.ay,
+                  "Minor head": p.minor_head,
+                  "Amount": inr(p.amount_paise // 100),
+                  "BSR code": p.bsr_code, "Deposited": p.deposit_date,
+                  "Challan no.": p.challan_serial}
+                 for p in doc.tax_payments]),
+                hide_index=True, width="stretch")
+            st.caption(
+                "A challan is reported in the AIS of the year it was PAID "
+                "but discharges the year it RELATES to, so only the rows "
+                "whose **Credited to A.Y.** matches the year you are filing "
+                "are picked up by the computation. Self-assessment tax paid "
+                "after 31 March appears only in the FOLLOWING year's AIS — "
+                "pull that one and it flows through automatically.")
     _part_meta = [("B1", "Part B1 · TDS / TCS"), ("B2", "Part B2 · SFT"),
-                  ("B3", "Part B3 · Payment of taxes"),
                   ("B4", "Part B4 · Demand & refund"),
                   ("B7", "Part B7 · Other information")]
     for pid, label in _part_meta:
@@ -510,8 +531,14 @@ if up26 and f26c2.button("Import 26AS", type="primary"):
         st.error(str(exc))
     else:
         n = importers_repo.import_26as(scope, ay, parsed["entries"])
-        st.success(f"Imported {n} TDS rows "
-                   f"({len(parsed.get('skipped', []))} skipped).")
+        msg = (f"Imported {n} TDS rows "
+               f"({len(parsed.get('skipped', []))} skipped).")
+        if parsed.get("challans"):
+            c = importers_repo.import_challans(scope, ay, parsed["challans"])
+            msg += (f" Plus {c} advance/self-assessment challan(s) from "
+                    "PART-C — hit **Auto-fill** on the Computation page to "
+                    "credit them.")
+        st.success(msg)
         st.rerun()
 
 _26_saved = importers_repo.get_26as_document(scope, ay)

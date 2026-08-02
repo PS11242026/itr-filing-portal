@@ -56,12 +56,29 @@ class Part:
 
 
 @dataclass
+class Challan:
+    """A PART-C row: tax paid by the assessee himself, not deducted by
+    anyone. These carry a BSR code + challan serial + date instead of a TAN,
+    which is why the deductor scanner never saw them — and why every
+    computation was missing its advance / self-assessment tax credit."""
+
+    major_head: str = ""       # "0021" — income tax other than companies
+    minor_head: str = ""       # "100" advance, "300" self-assessment, "400" …
+    kind: str = "advance"      # advance | self_assessment | regular_assessment
+    bsr_code: str = ""
+    challan_serial: str = ""
+    deposit_date: str = ""     # dd-mm-yyyy as printed
+    amount_paise: int | None = None
+
+
+@dataclass
 class Form26AS:
     pan: str = ""
     name: str = ""
     financial_year: str = ""
     assessment_year: str = ""
     parts: list[Part] = field(default_factory=list)
+    challans: list[Challan] = field(default_factory=list)
 
 
 def document_to_dict(doc: Form26AS) -> dict:
@@ -80,7 +97,8 @@ def document_from_dict(data: dict) -> Form26AS:
                 **{k: v for k, v in dd.items() if k != "transactions"},
                 transactions=[Txn(**tx) for tx in dd.get("transactions", [])])
                 for dd in p.get("deductors", [])])
-            for p in data.get("parts", [])])
+            for p in data.get("parts", [])],
+        challans=[Challan(**c) for c in data.get("challans", [])])
 
 
 def _paise(value) -> int | None:
@@ -188,6 +206,13 @@ def parse_26as_pdf(data: bytes) -> dict:
             low0 = cells[0].lower()
             if low0 in ("sr. no.", "sr.no.", "sr no", "sr. no"):
                 continue
+            # PART-C: tax paid by the assessee (no TAN — BSR code instead).
+            if (current_part is not None and current_part.part_id == "C"
+                    and _is_int(cells[0])):
+                challan = _challan_row(cells)
+                if challan is not None:
+                    doc.challans.append(challan)
+                    continue
             tan_idx = next((i for i, c in enumerate(cells)
                             if _TAN_RE.match(c)), None)
             if tan_idx is not None and _is_int(cells[0]):
@@ -222,6 +247,58 @@ def parse_26as_pdf(data: bytes) -> dict:
         raise ValueError("this PDF has tables but no 26AS parts were "
                          "recognised — is it really an Annual Tax Statement?")
     return {"document": doc, "entries": entries, "skipped": skipped}
+
+
+# Minor head on the challan → what the payment actually was. 100 = advance
+# tax, 300 = self-assessment tax, 400 = tax on regular assessment.
+_MINOR_HEAD_KIND = {"100": "advance", "102": "advance",
+                    "300": "self_assessment", "400": "regular_assessment"}
+_BSR_RE = re.compile(r"^\d{7}$")
+_DATE_RE = re.compile(r"^(\d{2})[-/](\d{2})[-/](\d{4})$")
+
+
+def _challan_row(cells: list[str]) -> Challan | None:
+    """A PART-C row reads: Sr | Major Head | Minor Head | Tax | Surcharge |
+    Education Cess | Others | Total Tax | BSR Code | Date of Deposit |
+    Challan Serial No. Column order shifts between TRACES releases, so the
+    row is recognised by its shapes (7-digit BSR, dd-mm-yyyy date) rather
+    than by position."""
+    bsr = next((c for c in cells[1:] if _BSR_RE.match(c)), "")
+    deposit = next((c for c in cells[1:] if _DATE_RE.match(c)), "")
+    if not bsr or not deposit:
+        return None
+    amounts = [c for c in cells[1:] if _paise(c) is not None
+               and c not in (bsr, deposit)]
+    if not amounts:
+        return None
+    # Major/minor head are the leading 4- and 3-digit codes.
+    major = next((c for c in cells[1:4] if re.fullmatch(r"0\d{3}", c)), "")
+    minor = next((c for c in cells[1:5]
+                  if re.fullmatch(r"\d{3}", c) and c != major), "")
+    # Total tax is the largest of the money columns — the components
+    # (tax / surcharge / cess / others) all roll into it.
+    total = max(_paise(a) or 0 for a in amounts)
+    return Challan(major_head=major, minor_head=minor,
+                   kind=_MINOR_HEAD_KIND.get(minor, "advance"),
+                   bsr_code=bsr, challan_serial=cells[-1].strip(),
+                   deposit_date=deposit, amount_paise=total)
+
+
+def challans_for_computation(doc: Form26AS) -> list[dict]:
+    """PART-C challans in the shape the computation's `challans` editor and
+    :class:`itrcore.tax.types.Challan` take: ISO date, whole rupees."""
+    out: list[dict] = []
+    for c in doc.challans:
+        if not c.amount_paise or c.kind == "regular_assessment":
+            continue                    # 400 is post-assessment, not a credit
+        m = _DATE_RE.match(c.deposit_date)
+        iso = f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else None
+        out.append({
+            "kind": c.kind,
+            "paid_on": iso,
+            "amount": round(c.amount_paise / 100),
+            "reference": f"{c.bsr_code} - {c.challan_serial}"})
+    return out
 
 
 def _predominant_section(d: Deductor) -> str:

@@ -32,8 +32,8 @@ def _row(label: str, a: int | None, b: int | None,
 
 def _schedule_table(regime: dict) -> str:
     rows = []
-    for head_key in ("salary", "house_property", "capital_gains",
-                     "other_sources"):
+    for head_key in ("salary", "house_property", "business", "speculation",
+                     "capital_gains", "other_sources"):
         head = regime["heads"].get(head_key)
         if not head:
             continue
@@ -47,6 +47,13 @@ def _schedule_table(regime: dict) -> str:
                 f"<tr><td>{escape(ln['label'])}</td>"
                 f"<td>{escape(ln['section'])}</td>"
                 f'<td class="num">{inr(ln["amount"])}</td></tr>')
+    if regime.get("setoff_lines"):
+        rows.append('<tr><th colspan="3">Set off &amp; carry forward of '
+                    'losses (Sec 70–74)</th></tr>')
+        for ln in regime["setoff_lines"]:
+            rows.append(f"<tr><td>{escape(ln['label'])}</td>"
+                        f"<td>{escape(ln['section'])}</td>"
+                        f'<td class="num">{inr(ln["amount"])}</td></tr>')
     for ln in regime.get("deduction_lines", []):
         rows.append(f"<tr><td>{escape(ln['label'])}</td>"
                     f"<td>{escape(ln['section'])}</td>"

@@ -1,0 +1,54 @@
+# AY 2026-27 engine calibration -- case 10 of 10.
+# Two employers, 80CCD(2), 10% surcharge, the 234C dividend-deferment
+# proviso, and a self-assessment challan that closes the account to nil.
+#
+# Expected values are read off a practitioner-software computation for a
+# real return. The assessee's identity, date of birth, address, employer
+# and bank names and challan numbers are replaced with neutral stand-ins
+# that preserve the tax behaviour exactly -- the DOB stand-in keeps the
+# same senior-citizen age band, which drives the slabs and the 234B/234C
+# waiver. Every rupee figure is untouched: that is what is being pinned.
+name: case_two_employers_surcharge_140a
+verified_against_utility: false
+inputs:
+  ay: "2026-27"
+  personal: {dob: "1985-01-01", resident_status: Resident}
+  regime_election: new
+  filing_date: "2026-07-28"
+  salaries:
+    - employer_name: Employer A
+      employer_tan: MUMT00054F
+      gross_salary: 3682021
+    - employer_name: Employer B
+      employer_tan: MUMT00054F
+      gross_salary: 6252759
+  other_sources:
+    savings_interest: 80297
+    fd_interest: 97550
+    dividend: 185288
+  deductions:
+    - ["80CCD(2)", 362682]
+  tds:
+    - {tan: MUMT00054F, deductor: Employer A, section: "192",
+       amount: 2778925}
+    - {tan: MUMI00123A, deductor: Listed company A, section: "194",
+       amount: 13941}
+    - {tan: MUMH00456B, deductor: Bank A, section: "194A",
+       amount: 9755}
+  challans:
+    - {kind: self_assessment, paid_on: "2026-07-28", amount: 108050}
+expected:
+  new:
+    gti: 10222915
+    total_income: 9860230
+    slab_tax: 2538069
+    surcharge: 253807
+    cess: 111675
+    tax_liability: 2903551
+    tds_total: 2802621
+    interest_234a: 0
+    interest_234b: 4036
+    interest_234c: 3079
+    fee_234f: 0
+    self_assessment_paid: 108050
+    payable_or_refund: 0

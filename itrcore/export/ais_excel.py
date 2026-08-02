@@ -141,6 +141,25 @@ def build(doc: AisDocument, *, ay: str) -> bytes:
         wp.write(3, 0, "Annual Information Statement (AIS)", f_title)
         wp.merge_range(4, 0, 4, 8, part_title, f_part)
         r = 5
+        # B3 carries challans, not information blocks (see AisDocument.
+        # tax_payments) — it has no l2/l1 shape to lay out.
+        if part == "B3":
+            if not doc.tax_payments:
+                wp.write(r, 0, "No tax payment reported under this part.",
+                         f_cell)
+                continue
+            wp.write_row(r, 0, ["Sr.", "Financial year", "Major head",
+                                "Minor head", "Amount", "BSR code",
+                                "Date of deposit", "Challan serial",
+                                "Challan identification no."], f_head)
+            r += 1
+            for i, p in enumerate(doc.tax_payments, start=1):
+                write_row(wp, r, [i, p.fy, p.major_head, p.minor_head,
+                                  p.amount_paise / 100, p.bsr_code,
+                                  p.deposit_date, p.challan_serial, p.cin],
+                          f_cell, f_num)
+                r += 1
+            continue
         blocks = doc.rows_for_part(part)
         if not blocks:
             wp.write(r, 0, "No information reported under this part.", f_cell)

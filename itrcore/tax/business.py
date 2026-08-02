@@ -44,9 +44,15 @@ def _s44ae(b: PresumptiveBusiness, cfg: dict) -> tuple[int, bool]:
     return max(income, b.declared_income), False
 
 
-def _regular(rb: RegularBusiness, lines: list[Line]) -> int:
-    name = rb.name or "Business (books)"
-    lines.append(Line(f"{name} — net profit per P&L", "28",
+def _regular(rb: RegularBusiness, lines: list[Line], *,
+             speculative: bool = False) -> int:
+    name = rb.name or ("Speculation business" if speculative
+                       else "Business (books)")
+    if speculative and rb.turnover:
+        lines.append(Line(f"{name} — turnover from speculative activity",
+                          "43(5)", rb.turnover))
+    lines.append(Line(f"{name} — net profit per P&L",
+                      "43(5)" if speculative else "28",
                       rb.net_profit_before_tax))
     income = rb.net_profit_before_tax
     for amount, label, section, sign in (
@@ -66,9 +72,16 @@ def _regular(rb: RegularBusiness, lines: list[Line]) -> int:
 
 def compute(presumptive: tuple[PresumptiveBusiness, ...],
             regular: tuple[RegularBusiness, ...],
-            cfg: dict) -> HeadResult:
+            cfg: dict) -> tuple[HeadResult, HeadResult]:
+    """Returns (ordinary business, speculation business) as separate heads.
+
+    They are one head for presentation but never for set-off: a speculation
+    loss is ring-fenced by Sec 73, so the two totals must stay apart until
+    :mod:`itrcore.tax.setoff` has had its say."""
     lines: list[Line] = []
+    spec_lines: list[Line] = []
     total = 0
+    spec_total = 0
     for b in presumptive:
         if b.section == "44AD":
             income, over = _s44ad(b, cfg["s44ad"])
@@ -87,7 +100,15 @@ def compute(presumptive: tuple[PresumptiveBusiness, ...],
                 "and audit (Sec 44AA/44AB) required", b.section, 0))
         total += income
     for rb in regular:
-        total += _regular(rb, lines)
+        if rb.is_speculative:
+            spec_total += _regular(rb, spec_lines, speculative=True)
+        else:
+            total += _regular(rb, lines)
     if lines:
         lines.append(Line("Income from business or profession", "28", total))
-    return HeadResult(head="business", amount=total, lines=tuple(lines))
+    if spec_lines:
+        spec_lines.append(Line("Income from speculation business", "43(5)",
+                               spec_total))
+    return (HeadResult(head="business", amount=total, lines=tuple(lines)),
+            HeadResult(head="speculation", amount=spec_total,
+                       lines=tuple(spec_lines)))

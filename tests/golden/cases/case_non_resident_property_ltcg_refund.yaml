@@ -1,0 +1,44 @@
+# AY 2026-27 engine calibration -- case 6 of 10.
+# Second non-resident selling a co-owned share of the same flat: pins the
+# 12.5% unindexed rate and the refund rounding u/s 288B.
+#
+# Expected values are read off a practitioner-software computation for a
+# real return. The assessee's identity, date of birth, address, employer
+# and bank names and challan numbers are replaced with neutral stand-ins
+# that preserve the tax behaviour exactly -- the DOB stand-in keeps the
+# same senior-citizen age band, which drives the slabs and the 234B/234C
+# waiver. Every rupee figure is untouched: that is what is being pinned.
+name: case_non_resident_property_ltcg_refund
+verified_against_utility: false
+inputs:
+  ay: "2026-27"
+  personal: {dob: "1985-01-01", resident_status: Non-Resident}
+  regime_election: new
+  filing_date: "2026-07-18"
+  capital_gains:
+    - asset_class: property
+      description: Flat
+      acquisition_date: "2011-08-04"
+      transfer_date: "2025-12-20"
+      full_value_consideration: 4000000
+      stamp_duty_value: 4000000
+      cost_of_acquisition: 1730375
+      buyer_name: Buyer A
+  other_sources:
+    savings_interest: 14381
+    fd_interest: 22572
+  tds:
+    - {tan: MUMI00040I, deductor: Bank A, section: "195",
+       amount: 583544}
+expected:
+  new:
+    gti: 2306578
+    total_income: 2306580
+    normal_income: 36955
+    slab_tax: 0
+    special_tax: 283703
+    cess: 11348
+    tax_liability: 295051
+    tds_total: 583544
+    fee_234f: 0
+    payable_or_refund: -288490

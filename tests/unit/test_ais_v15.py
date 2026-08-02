@@ -127,14 +127,36 @@ def test_parse_document_bifurcates_parts(encrypted_ais):
     assert len(salary.detail.rows) == 2
 
 
+@pytest.fixture
+def pairwise_dedup(monkeypatch):
+    """Flip off the SFT-only rule for the tests that pin the older
+    pairwise behaviour."""
+    monkeypatch.setattr(ais, "_sft_only", lambda: False)
+
+
 def test_dedup_salary_not_double_counted(encrypted_ais):
     doc = ais.parse_ais_document(encrypted_ais, pan=PAN, dob=DOB)
     totals = doc.category_totals()          # paise
     # Salary is in B1 (TDS-192) AND B7 (Annexure) for the SAME employer → once.
     assert totals["salary"] == 100000000
-    # Deposit interest: SBI in B1 (50k) + HDFC in B2 (20k) = 70k (different
-    # payers summed; nothing double counted).
-    assert totals["interest_deposits"] == 7000000
+
+
+def test_sft_feed_alone_decides_an_sft_backed_bucket(encrypted_ais):
+    # Deposit interest is reported by SBI in B1 (TDS-194A, 50k) and by HDFC
+    # in B2 (SFT-016, 20k). Payer names and figures both differ, so pairwise
+    # matching would sum them — and that is exactly how a TDS re-report
+    # inflates the FD interest. Once the bucket is SFT-backed, only the SFT
+    # feed counts.
+    doc = ais.parse_ais_document(encrypted_ais, pan=PAN, dob=DOB)
+    assert doc.category_totals()["interest_deposits"] == 2000000
+    dropped = {(r.source, r.amount_paise) for r in doc.dropped_tds_rows()}
+    assert ("SBI (BLRC00002B)", 5000000) in dropped   # visible, not deleted
+
+
+def test_pairwise_dedup_when_sft_only_disabled(encrypted_ais, pairwise_dedup):
+    doc = ais.parse_ais_document(encrypted_ais, pan=PAN, dob=DOB)
+    # Different payers, different figures → both survive under the old rule.
+    assert doc.category_totals()["interest_deposits"] == 7000000
 
 
 def test_tis_summary_processed_values(encrypted_ais):
@@ -142,14 +164,57 @@ def test_tis_summary_processed_values(encrypted_ais):
     tis = {r["category"]: r for r in doc.tis_summary()}
     assert tis["Salary"]["processed_paise"] == 100000000
     assert tis["Salary"]["derived_paise"] == 100000000
-    assert tis["Interest from deposit"]["processed_paise"] == 7000000
+    assert tis["Interest from deposit"]["processed_paise"] == 2000000
 
 
 def test_flat_entries_feed_importer(encrypted_ais):
     entries = ais.parse_ais_json(encrypted_ais, pan=PAN, dob=DOB)
     by = {e["category"]: e["amount_paise"] for e in entries}
     assert by["salary"] == 100000000
-    assert by["interest_deposits"] == 7000000
+    assert by["interest_deposits"] == 2000000
+
+
+def test_tis_entries_are_grouped_by_bucket_not_category_text():
+    """Post-office savings interest is filed by the ITD under plain
+    "Interest from savings bank". Re-classifying that TEXT would fold it
+    back into bank interest — and because auto-fill prefers the TIS figure
+    over the AIS one, the same money would then land in BOTH the savings
+    and the post-office field."""
+    tree = {"metadata": {"jsonVersion": "15.0.0"},
+            "partA": {"columnLabel": [], "columnData": []},
+            "partB": {"sections": [
+                {"title": "Part B2-SFT", "heading": "SFT Information",
+                 "elements": [
+                     _block("Interest from savings bank", "SFT-016(SB)",
+                            "Interest", "STATE BANK OF INDIA (AAACS.AB)", "1",
+                            "24,286.00", "INS", [], []),
+                     _block("Interest from savings bank", "SFT-016(SB)",
+                            "Interest", "CPRC CHENNAI (CHEC18029E.AP563)", "1",
+                            "13,633.00", "INS", [], [])]}]}}
+    doc = ais._parse_v15(tree)
+    by = {e["category"]: e["processed_value_paise"]
+          for e in ais.tis_entries(doc)}
+    assert by == {"interest_savings": 2428600,
+                  "interest_post_office": 1363300}
+
+
+def test_post_office_savings_interest_gets_its_own_bucket():
+    # The AIS files it under the same category as any bank's savings
+    # interest; only the payer says it is the post office, and only post
+    # office savings interest gets the 10(15)(i) exemption.
+    assert ais._bucket("Interest from savings bank", "INS",
+                       "CPRC CHENNAI (CHEC00001A)") == "interest_post_office"
+    assert ais._bucket("Interest from savings bank", "INS",
+                       "HDFC BANK LIMITED") == "interest_savings"
+
+
+def test_credit_card_payment_is_expenditure_not_income():
+    # SFT-006: a ₹37 lakh credit-card bill the assessee PAID. The AIS calls
+    # several such rows "Miscellaneous payment"; none of them is income.
+    assert ais.classify("Payment to credit card") == "expenditure"
+    assert ais.classify("Purchase of bank drafts or pay orders in cash") \
+        == "expenditure"
+    assert ais.classify("Winnings from lottery") == "other_income"
 
 
 def test_encrypted_without_credentials_errors(encrypted_ais):

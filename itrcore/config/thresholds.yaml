@@ -27,3 +27,16 @@ noise_keywords: [CHRG, CHARGES, SMS CHG, AMC, MIN BAL, MAB, GST, FEE,
 recon:
   tds_tolerance_inr: 1              # per-TAN TDS match tolerance
   ais_tolerance_inr: 100            # AIS category vs books tolerance
+
+ais:
+  # Interest and dividend reach the AIS twice — Part B1 as the TDS block and
+  # Part B2 as the SFT block — under payer names and figures that often do
+  # not agree. When true, an SFT-backed bucket takes its total from the SFT
+  # feed ALONE (what the ITD derives its TIS processed value from), so no
+  # TDS re-report can inflate it. Every suppressed row is listed as a
+  # follow-up on the computation page, because a payer that reports only
+  # through TDS — a company deposit, never SFT-016 reported — must then be
+  # added back by hand as an adjustment line.
+  # Set false to fall back to pairwise matching (payer name or exact figure),
+  # which keeps TDS-only payers automatically but can double count.
+  sft_only_for_interest_and_dividend: true

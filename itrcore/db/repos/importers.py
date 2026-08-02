@@ -77,6 +77,49 @@ def import_26as(scope: TaxpayerScope, ay: str, entries: list[dict]) -> int:
     return len(entries)
 
 
+def import_challans(scope: TaxpayerScope, ay: str,
+                    challans: list[dict]) -> int:
+    """Store advance / self-assessment challans read from a statement.
+
+    Used by the sources that do NOT persist a parsed document of their own —
+    the TRACES text/CSV 26AS export. The AIS and the 26AS PDF keep their
+    documents, so auto-fill re-derives their challans on the fly and they
+    never go stale here."""
+    require_staff(scope.principal, "Staff", "Importing tax challans")
+    rows = [c for c in challans
+            if c.get("paid_on") and int(c.get("amount", 0) or 0) > 0
+            and c.get("kind") in ("advance", "self_assessment")]
+    with connection.tx() as conn:
+        conn.execute("DELETE FROM challans WHERE taxpayer_id=? AND ay=?",
+                     (scope.taxpayer_id, ay))
+        conn.executemany(
+            "INSERT INTO challans (taxpayer_id, ay, kind, bsr_code,"
+            " challan_no, paid_on, amount_paise, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?)",
+            [(scope.taxpayer_id, ay, c["kind"],
+              str(c.get("reference", "")).split(" - ")[0] or None,
+              (str(c.get("reference", "")).split(" - ") + [""])[1] or None,
+              c["paid_on"], int(c["amount"]) * 100, connection.now())
+             for c in rows])
+    auditlog.log(scope.principal.username, "CHALLAN_IMPORT", entity="challans",
+                 entity_id=scope.taxpayer_id, taxpayer_id=scope.taxpayer_id,
+                 details={"ay": ay, "rows": len(rows)})
+    return len(rows)
+
+
+def list_challans(scope: TaxpayerScope, ay: str) -> list[dict]:
+    """Stored challans, shaped for the computation's `challans` input."""
+    rows = connection.query(
+        "SELECT kind, bsr_code, challan_no, paid_on, amount_paise FROM"
+        " challans WHERE taxpayer_id=? AND ay=? ORDER BY paid_on",
+        (scope.taxpayer_id, ay))
+    return [{"kind": r["kind"], "paid_on": r["paid_on"],
+             "amount": round(r["amount_paise"] / 100),
+             "reference": " - ".join(x for x in (r["bsr_code"],
+                                                 r["challan_no"]) if x)}
+            for r in rows]
+
+
 def list_tds(scope: TaxpayerScope, ay: str, source: str | None = None):
     sql = "SELECT * FROM tds_entries WHERE taxpayer_id=? AND ay=?"
     params: list = [scope.taxpayer_id, ay]
@@ -150,6 +193,22 @@ def save_ais_document(scope: TaxpayerScope, ay: str, doc: dict,
 
 def get_ais_document(scope: TaxpayerScope, ay: str) -> dict | None:
     return _get_document(scope, ay, "ais_documents")
+
+
+def list_ais_documents(scope: TaxpayerScope) -> list[dict]:
+    """Every stored AIS document for this client, newest AY first.
+
+    Needed because a challan is reported in the AIS of the year it was PAID
+    while it discharges the year it RELATES to: self-assessment tax for
+    AY 2026-27 paid in July 2026 falls in FY 2026-27, so it only ever shows
+    up in the FOLLOWING year's AIS. Reading one AY's document alone can
+    never find it."""
+    rows = connection.query(
+        "SELECT ay, doc_json, source_file, created_at FROM ais_documents"
+        " WHERE taxpayer_id=? ORDER BY ay DESC", (scope.taxpayer_id,))
+    return [{"ay": r["ay"], "doc": json.loads(r["doc_json"]),
+             "source_file": r["source_file"], "created_at": r["created_at"]}
+            for r in rows]
 
 
 def refresh_ais_derived(scope: TaxpayerScope, ay: str) -> bool:

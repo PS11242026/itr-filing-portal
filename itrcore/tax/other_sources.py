@@ -9,8 +9,8 @@ printed as its own line, Genius-style.
 
 from itrcore.tax.types import AdjustmentEntry, HeadResult, Line, OtherSources
 
-_FIELDS = ("savings_interest", "fd_interest", "dividend", "family_pension",
-           "taxable_gifts", "other")
+_FIELDS = ("savings_interest", "post_office_savings_interest", "fd_interest",
+           "dividend", "family_pension", "taxable_gifts", "other")
 
 
 def _by_field(adjustments) -> dict[str, list[AdjustmentEntry]]:
@@ -22,17 +22,36 @@ def _by_field(adjustments) -> dict[str, list[AdjustmentEntry]]:
     return out
 
 
-def adjusted_fields(os_: OtherSources, adjustments) -> dict[str, int]:
+def post_office_exemption(gross: int, joint: bool, cfg: dict) -> int:
+    """Sec 10(15)(i) r/w Rule 2BBA item (i): interest on a Post Office
+    savings-bank account is exempt up to ₹3,500 (₹7,000 where the account is
+    held jointly). 115BAC does not withdraw it, so it applies under both
+    regimes — and it is an exemption, not a Chapter VI-A deduction, so it
+    comes off the income itself."""
+    cap = cfg["joint" if joint else "single"]
+    return min(max(0, gross), cap)
+
+
+def adjusted_fields(os_: OtherSources, adjustments,
+                    exempt_cfg: dict | None = None) -> dict[str, int]:
     """Field → adjusted value (floored at 0), for the deduction engine's
-    80TTA/80TTB interest figures."""
+    80TTA/80TTB interest figures. Post-office savings interest is folded into
+    ``savings_interest`` NET of its 10(15)(i) exemption, which is exactly the
+    figure 80TTA/80TTB caps operate on."""
     adj = _by_field(adjustments)
-    return {f: max(0, getattr(os_, f)
-                   + sum(a.amount for a in adj.get(f, ())))
-            for f in _FIELDS}
+    out = {f: max(0, getattr(os_, f)
+                  + sum(a.amount for a in adj.get(f, ())))
+           for f in _FIELDS}
+    if exempt_cfg is not None:
+        po = out["post_office_savings_interest"]
+        out["savings_interest"] += po - post_office_exemption(
+            po, os_.post_office_joint_account, exempt_cfg)
+    return out
 
 
 def compute(os_: OtherSources, regime_cfg: dict,
-            adjustments: tuple[AdjustmentEntry, ...] = ()) -> HeadResult:
+            adjustments: tuple[AdjustmentEntry, ...] = (),
+            post_office_cfg: dict | None = None) -> HeadResult:
     adj = _by_field(adjustments)
     lines: list[Line] = []
     total = 0
@@ -58,6 +77,21 @@ def compute(os_: OtherSources, regime_cfg: dict,
     ]
     for field, label, section, base in simple:
         total += _field(field, base, label, section)
+
+    po = _field("post_office_savings_interest",
+                os_.post_office_savings_interest,
+                "Interest — post office savings account", "56")
+    if po:
+        exempt = post_office_exemption(
+            po, os_.post_office_joint_account,
+            post_office_cfg or {"single": 0, "joint": 0})
+        if exempt:
+            lines.append(Line(
+                "Less: exempt u/s 10(15)(i) — post office savings account"
+                + (" (joint)" if os_.post_office_joint_account else ""),
+                "10(15)(i)", -exempt))
+        po -= exempt
+    total += po
 
     fp = _field("family_pension", os_.family_pension, "Family pension", "56")
     if fp > 0:

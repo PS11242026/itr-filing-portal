@@ -69,12 +69,16 @@ def test_112a_with_salary_slab_only_rebate():
             acquisition_date=date(2020, 1, 1),
             full_value_consideration=800000, cost_of_acquisition=500000),)))
     new = result.new
-    # TI = 9,25,000 + (3L − 1.25L) = 11,00,000 ≤ 12L
-    assert new.total_income == 1100000
+    # TI = 9,25,000 + 3,00,000 = 12,25,000 — the ₹1.25L in 112A(2) is a rate
+    # concession, so the whole gain stays in total income and only the excess
+    # bears 12.5%.
+    assert new.total_income == 1225000
     assert new.slab_tax == 32500
-    assert new.rebate_87a == 32500           # slab portion only
+    # TI is now ₹25,000 past the ₹12L rebate limit, so 87A marginal relief
+    # caps the slab tax at that excess: 32,500 − 25,000 = 7,500 of rebate.
+    assert new.rebate_87a == 7500
     assert new.special_tax == 21875          # 1.75L @ 12.5%
-    assert new.tax_liability == 21875 + 875  # + 4% cess
+    assert new.tax_liability == 25000 + 21875 + 1875   # + 4% cess
 
 
 def test_old_regime_with_deductions_and_tds_refund():

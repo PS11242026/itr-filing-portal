@@ -1,15 +1,18 @@
-"""Capital gains: Sec 50C, 112A, grandfathered indexation option, set-offs."""
+"""Capital gains: Sec 50C, 112A, grandfathered indexation option, set-offs.
+
+Brought-forward losses moved to :mod:`itrcore.tax.setoff` (they may only be
+applied once every head is known), so they are covered in test_tax_setoff.py.
+"""
 
 from datetime import date
 
 from itrcore.tax import capital_gains
 from itrcore.tax.ayconfig import load
-from itrcore.tax.types import BroughtForwardLosses, CGEntry
+from itrcore.tax.types import CGEntry
 
 CFG = load("2026-27")
 CG_CFG = {**CFG.raw["capital_gains"],
           "cg_regime_cutoff": CFG.raw["cg_regime_cutoff"]}
-NO_BF = BroughtForwardLosses()
 
 
 def test_sec_50c_deems_sdv_beyond_110pct():
@@ -19,8 +22,7 @@ def test_sec_50c_deems_sdv_beyond_110pct():
                     full_value_consideration=6000000,
                     stamp_duty_value=7000000,       # > 110% of 60L (66L)
                     cost_of_acquisition=3000000)
-    res = capital_gains.compute((entry,), CG_CFG, resident=True,
-                                brought_forward=NO_BF)
+    res = capital_gains.compute((entry,), CG_CFG, resident=True)
     # 12.5% unindexed on 40L (5,00,000) beats 20% indexed
     # (indexed cost 30L×376/254 = 44,40,944 → gain 25,59,056 → 5,11,811)
     assert res.ltcg_125 == 4000000
@@ -35,8 +37,7 @@ def test_sec_50c_within_tolerance_not_deemed():
                     full_value_consideration=6000000,
                     stamp_duty_value=6500000,       # ≤ 110% → no deeming
                     cost_of_acquisition=3000000)
-    res = capital_gains.compute((entry,), CG_CFG, resident=True,
-                                brought_forward=NO_BF)
+    res = capital_gains.compute((entry,), CG_CFG, resident=True)
     # No 50C deeming; and here the grandfathered indexed option wins:
     # indexed cost 30L×376/254 = 44,40,944 → gain 15,59,056 @ 20%
     # (3,11,811) beats 30L @ 12.5% (3,75,000)
@@ -55,8 +56,7 @@ def test_grandfathered_indexed_option_chosen_when_cheaper():
                     acquisition_date=date(2018, 6, 1),
                     full_value_consideration=7000000,
                     cost_of_acquisition=5000000)
-    res = capital_gains.compute((entry,), CG_CFG, resident=True,
-                                brought_forward=NO_BF)
+    res = capital_gains.compute((entry,), CG_CFG, resident=True)
     assert res.ltcg_20_indexed == 285715
     assert res.ltcg_125 == 0
 
@@ -75,10 +75,11 @@ def test_112a_pooling_exemption_and_grandfather_stepup():
                 full_value_consideration=300000,
                 cost_of_acquisition=200000),
     )
-    res = capital_gains.compute(entries, CG_CFG, resident=True,
-                                brought_forward=NO_BF)
-    # pool = (8L−5L) + (3L−2L) = 4,00,000 → taxable beyond 1.25L = 2,75,000
-    assert res.ltcg_112a_taxable == 275000
+    res = capital_gains.compute(entries, CG_CFG, resident=True)
+    # pool = (8L−5L) + (3L−2L) = 4,00,000 — GROSS: the ₹1.25L in 112A(2) is
+    # a rate concession applied by the tax stage, not a cut in the income.
+    assert res.ltcg_112a == 400000
+    assert res.head_total == 400000
 
 
 def test_stcg_111a_and_slab_buckets():
@@ -94,8 +95,7 @@ def test_stcg_111a_and_slab_buckets():
                 full_value_consideration=200000,
                 cost_of_acquisition=150000),
     )
-    res = capital_gains.compute(entries, CG_CFG, resident=True,
-                                brought_forward=NO_BF)
+    res = capital_gains.compute(entries, CG_CFG, resident=True)
     assert res.stcg_111a == 80000
     assert res.stcg_slab == 50000
     assert res.head_total == 130000
@@ -114,23 +114,37 @@ def test_ltcl_sets_off_against_ltcg_only():
                 full_value_consideration=300000,
                 cost_of_acquisition=220000),
     )
-    res = capital_gains.compute(entries, CG_CFG, resident=True,
-                                brought_forward=NO_BF)
+    res = capital_gains.compute(entries, CG_CFG, resident=True)
     assert res.stcg_111a == 80000       # untouched by LTCL
     assert res.cf_ltcl == 100000        # carried forward
 
 
-def test_brought_forward_losses_applied():
+def test_equity_mf_stcg_is_111a_not_slab():
+    # Sec 111A covers units of an equity-oriented fund on which STT is paid,
+    # not just shares — a debt/liquid fund stays at the slab.
     entries = (
-        CGEntry(asset_class="listed_equity_stt",
-                transfer_date=date(2025, 8, 1),
-                acquisition_date=date(2020, 1, 1),
-                full_value_consideration=600000,
-                cost_of_acquisition=200000),           # 112A pool 4L
+        CGEntry(asset_class="equity_mf", description="SBI PSU Fund",
+                transfer_date=date(2025, 11, 6),
+                acquisition_date=date(2025, 4, 1),
+                full_value_consideration=232, cost_of_acquisition=217),
+        CGEntry(asset_class="listed_other", description="Liquid fund",
+                transfer_date=date(2026, 3, 20),
+                acquisition_date=date(2025, 4, 20),
+                full_value_consideration=50000, cost_of_acquisition=49952),
     )
-    res = capital_gains.compute(entries, CG_CFG, resident=True,
-                                brought_forward=BroughtForwardLosses(
-                                    ltcl=150000))
-    # pool 4L − b/f 1.5L = 2.5L → taxable beyond 1.25L = 1.25L
-    assert res.ltcg_112a_taxable == 125000
-    assert res.cf_ltcl == 0
+    res = capital_gains.compute(entries, CG_CFG, resident=True)
+    assert res.stcg_111a == 15
+    assert res.stcg_slab == 48
+
+
+def test_non_resident_property_has_no_indexation_option():
+    entry = CGEntry(asset_class="property", description="Flat",
+                    transfer_date=date(2025, 12, 20),
+                    acquisition_date=date(2011, 8, 4),
+                    full_value_consideration=4000000,
+                    stamp_duty_value=4000000,
+                    cost_of_acquisition=1730375)
+    res = capital_gains.compute((entry,), CG_CFG, resident=False)
+    assert res.ltcg_125 == 2269625      # 12.5% unindexed, no option
+    assert res.ltcg_20_indexed == 0
+    assert any("RESIDENT" in ln.label for ln in res.reco_lines)

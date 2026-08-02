@@ -40,6 +40,7 @@ key = f"{scope.taxpayer_id}_{ay}"
 # Data-editor session keys cleared whenever the seed changes (save /
 # compute / auto-fill), so stale deltas never replay onto shifted rows.
 _EDITOR_PREFIXES = ("sal", "hp", "biz", "regbiz", "cg", "ded", "tds", "ch",
+                    "bf",
                     "club", "ei", "adjsal", "adjhp", "adjbiz", "adjos",
                     "adjtds")
 
@@ -236,6 +237,61 @@ def _adjustments_editor(suffix: str, targets, caption: str) -> list[dict]:
                 if r["amount"] and r["subhead"] in target_of]
 
 
+_BOOK_ACCOUNTS = (
+    ("balance_sheet", "Balance Sheet",
+     (("sources", "Sources of funds"), ("application", "Application of "
+                                        "funds"))),
+    ("manufacturing", "Manufacturing account",
+     (("credits", "Credits"), ("debits", "Debits"))),
+    ("trading", "Trading account",
+     (("credits", "Credits"), ("debits", "Debits"))),
+    ("pnl", "Profit & Loss account",
+     (("credits", "Credits"), ("debits", "Debits"))),
+)
+
+
+def _books_editor(biz_name: str, parsed: dict) -> None:
+    """Type or correct the balance sheet / manufacturing / trading / P&L
+    line items directly. The import gets you 90% of the way; this is the
+    other 10% — and the only way in for a client who has no Genius workbook
+    to upload. Saving re-derives the account chain, so the reconciliation
+    against the business row stays honest."""
+    edited: dict[str, dict] = {}
+    changed = False
+    for account, title, sides in _BOOK_ACCOUNTS:
+        acct = parsed.get(account) or {}
+        st.markdown(f"*{title}*")
+        cols = st.columns(len(sides))
+        acct_out: dict[str, list] = {}
+        for col, (side_key, side_title) in zip(cols, sides):
+            with col:
+                df = st.data_editor(
+                    _seed(acct.get(side_key, []),
+                          {"label": "text", "amount": "int"}),
+                    num_rows="dynamic",
+                    key=f"books_{key}_{biz_name}_{account}_{side_key}",
+                    column_config={
+                        "label": st.column_config.TextColumn(side_title,
+                                                             width="large"),
+                        "amount": st.column_config.NumberColumn("Amount",
+                                                                step=1),
+                    })
+                rows = [r for r in _records(df, {"label": "", "amount": 0})
+                        if r["label"] or r["amount"]]
+                acct_out[side_key] = rows
+                if rows != list(acct.get(side_key, [])):
+                    changed = True
+        edited[account] = acct_out
+    if changed and st.button("💾 Save books", key=f"books_save_{key}_"
+                                                  f"{biz_name}"):
+        merged = dict(stored)
+        books = dict(merged.get("books", {}))
+        books[biz_name] = {**parsed, **edited}
+        merged["books"] = books
+        comp_repo.save_inputs(scope, ay, merged)
+        st.rerun()
+
+
 st.caption(
     "✏️ Every line item below is editable: click any cell to change it, "
     "tick the checkbox at a row's left edge and press **Delete** (or the "
@@ -347,13 +403,15 @@ with tabs[2]:
     with st.expander("📚 Regular books of accounts (Genius BS & P&L "
                      "workbook) — import & reconcile"):
         st.caption(
-            "Upload the filled **Genius-format BS and P&L workbook** (the "
-            "statutory ITR-3 Part A structure: Balance Sheet sources/"
-            "application, Manufacturing, Trading and P&L heads with their "
-            "subheads). The tool re-derives cost of goods produced → gross "
-            "profit → **net profit per books** from the entry lines, and "
-            "the business row's income below must reconcile with it — any "
-            "difference is flagged before Compute.")
+            "Two ways in. **Import** the filled Genius-format BS and P&L "
+            "workbook (the statutory ITR-3 Part A structure: Balance Sheet "
+            "sources/application, Manufacturing, Trading and P&L heads with "
+            "their subheads) — or **start blank** and type the line items "
+            "here, for a client who has no such workbook. Either way the "
+            "tool re-derives cost of goods produced → gross profit → **net "
+            "profit per books** from the entry lines, and the business row's "
+            "income below must reconcile with it — any difference is flagged "
+            "before Compute. Everything stays editable afterwards.")
         _biz_names = [b.get("name") or f"Business {i + 1}"
                       for i, b in enumerate(
                           stored.get("regular_businesses", []))]
@@ -366,6 +424,17 @@ with tabs[2]:
             books_up = st.file_uploader(
                 "Genius BS & P&L workbook (.xlsx)", type=["xlsx"],
                 key=f"books_up_{key}")
+            if books_biz not in (stored.get("books", {}) or {}) and \
+                    st.button("➕ Start blank books for this business",
+                              key=f"books_blank_{key}"):
+                merged = dict(stored)
+                books = dict(merged.get("books", {}))
+                books[books_biz] = {
+                    account: {side: [] for side, _ in sides}
+                    for account, _, sides in _BOOK_ACCOUNTS}
+                merged["books"] = books
+                comp_repo.save_inputs(scope, ay, merged)
+                st.rerun()
             if books_up is not None and st.button(
                     "Import books & reconcile", type="primary",
                     key=f"books_import_{key}"):
@@ -427,36 +496,31 @@ with tabs[2]:
                     comp_repo.save_inputs(scope, ay, merged)
                     st.session_state.pop(f"regbiz_{key}", None)
                     st.rerun()
-            for account, title in (
-                    ("manufacturing", "Manufacturing account"),
-                    ("trading", "Trading account"),
-                    ("pnl", "Profit & Loss account"),
-                    ("balance_sheet", "Balance Sheet")):
-                acct = parsed.get(account)
-                if not acct:
-                    continue
-                sides = (("sources", "Sources of funds"),
-                         ("application", "Application of funds")) \
-                    if account == "balance_sheet" else \
-                    (("credits", "Credits"), ("debits", "Debits"))
-                rows_disp = [
-                    {"Head": title, "Side": side_title,
-                     "Particulars": e["label"], "Amount": inr(e["amount"])}
-                    for side_key, side_title in sides
-                    for e in acct.get(side_key, [])]
-                if rows_disp:
-                    st.dataframe(pd.DataFrame(rows_disp), hide_index=True,
-                                 width="stretch")
+            _books_editor(biz_name, parsed)
 
+    st.caption(
+        "Tick **Speculative** for intra-day equity and anything else that is "
+        "a speculation business u/s 43(5). It is kept in its own bucket "
+        "because a speculation LOSS can be set off only against speculation "
+        "PROFITS (Sec 73) — never against salary, interest or capital gains "
+        "— and carries forward for four years, not eight.")
     regbiz_df = st.data_editor(
         _seed(stored.get("regular_businesses", []),
-              {"name": "text", "net_profit_before_tax": "int",
+              {"name": "text", "is_speculative": "bool", "turnover": "int",
+               "net_profit_before_tax": "int",
                "depreciation_books": "int", "depreciation_it": "int",
                "disallowances": "int", "other_additions": "int",
                "other_deductions": "int"}),
         num_rows="dynamic", key=f"regbiz_{key}",
         column_config={
             "name": st.column_config.TextColumn("Business / profession"),
+            "is_speculative": st.column_config.CheckboxColumn(
+                "Speculative?",
+                help="Sec 43(5) — intra-day equity and similar. Ring-fenced "
+                     "for set-off and carry-forward."),
+            "turnover": st.column_config.NumberColumn(
+                "Turnover", min_value=0, step=1,
+                help="Shown in the speculative-activity P&L statement."),
             "net_profit_before_tax": st.column_config.NumberColumn(
                 "Net profit per P&L", step=1),
             "depreciation_books": st.column_config.NumberColumn(
@@ -586,7 +650,9 @@ with tabs[3]:
                "full_value_consideration": "int", "stamp_duty_value": "int",
                "cost_of_acquisition": "int", "cost_of_improvement": "int",
                "transfer_expenses": "int", "fmv_31jan2018": "int",
-               "exemption_claimed": "int", "exemption_section": "text"}),
+               "exemption_claimed": "int", "exemption_section": "text",
+               "buyer_name": "text", "buyer_pan": "text",
+               "buyer_address": "text"}),
         num_rows="dynamic", key=f"cg_{key}",
         column_config={
             "asset_class": st.column_config.SelectboxColumn(
@@ -616,7 +682,20 @@ with tabs[3]:
                 "Exemption claimed", min_value=0, step=1),
             "exemption_section": st.column_config.SelectboxColumn(
                 "Exemption sec", options=["", "54", "54EC", "54F"]),
+            "buyer_name": st.column_config.TextColumn(
+                "Buyer name",
+                help="Transferee particulars — Schedule CG requires them for "
+                     "immovable property, and they print on the statement."),
+            "buyer_pan": st.column_config.TextColumn("Buyer PAN"),
+            "buyer_address": st.column_config.TextColumn("Buyer address"),
         })
+    st.caption(
+        "For land or building acquired **before 23-07-2024** by a RESIDENT "
+        "individual/HUF the engine computes both options in the proviso to "
+        "Sec 112(1) — 12.5% without indexation and 20% with indexation — "
+        "adopts the lower, and prints both sides in the *LONG-TERM CAPITAL "
+        "GAIN — RATE OPTION RECONCILIATION* block of the computation sheet. "
+        "A non-resident gets 12.5% only; the sheet says so explicitly.")
 
 with tabs[4]:
     os_stored = stored.get("other_sources", {})
@@ -628,6 +707,15 @@ with tabs[4]:
         os_fd = st.number_input("FD/RD/other interest", 0,
                                 value=os_stored.get("fd_interest", 0),
                                 step=1000)
+        os_po = st.number_input(
+            "Post-office savings interest (gross)", 0,
+            value=os_stored.get("post_office_savings_interest", 0), step=100,
+            help="Enter the GROSS figure. The ₹3,500 (₹7,000 joint) "
+                 "exemption u/s 10(15)(i) is applied automatically under "
+                 "both regimes — do not net it off yourself.")
+        os_po_joint = st.checkbox(
+            "…held jointly (₹7,000 exemption)",
+            value=bool(os_stored.get("post_office_joint_account", False)))
     with c2:
         os_div = st.number_input("Dividend", 0,
                                  value=os_stored.get("dividend", 0),
@@ -699,9 +787,24 @@ with tabs[6]:
         "TAN-wise rows above — the e-filing schedules are built from the "
         "rows.")
     st.markdown("**Advance / self-assessment tax challans**")
+    st.caption(
+        "Tax the assessee paid himself. **Auto-fill** populates these from "
+        "the ITD pull — AIS **Part B3 (Payment of Taxes)**, plus PART-C of "
+        "an older Form 26AS. Note the current TRACES 26AS no longer carries "
+        "them at all: its Part VII says \"for other details refer AIS\". "
+        "They are a tax CREDIT — without them the computation shows a "
+        "payable the client has already settled, and charges 234B/234C "
+        "interest on money paid on time.")
+    st.caption(
+        "⚠️ A challan is reported in the AIS of the year it was **paid** but "
+        "discharges the year it **relates to**. Self-assessment tax for this "
+        "AY is normally paid in July, i.e. in the NEXT financial year, so it "
+        "appears only in the following year's AIS. Pull that one and it is "
+        "credited here automatically; until it exists, type the challan in.")
     ch_df = st.data_editor(
         _seed(stored.get("challans", []),
-              {"kind": "text", "paid_on": "date", "amount": "int"}),
+              {"kind": "text", "paid_on": "date", "amount": "int",
+               "reference": "text"}),
         num_rows="dynamic", key=f"ch_{key}",
         column_config={
             "kind": st.column_config.SelectboxColumn(
@@ -709,6 +812,9 @@ with tabs[6]:
             "paid_on": st.column_config.DateColumn("Paid on"),
             "amount": st.column_config.NumberColumn("Amount", min_value=0,
                                                     step=1),
+            "reference": st.column_config.TextColumn(
+                "BSR - challan no.",
+                help="Printed on the computation, Genius-style."),
         })
 
 with tabs[7]:
@@ -764,26 +870,53 @@ with tabs[9]:
              "opting old regime is done in the ITR itself for "
              "non-business income.")
     filing_default = settings.get("filing_date")
+    _due = dt.date.fromisoformat(load_cfg(ay).raw["due_date"])
     filing_date = st.date_input(
-        "Expected filing date (drives 234A/B/C/F)",
+        "Date of filing (drives 234A/B/C/F)",
         value=(dt.date.fromisoformat(filing_default) if filing_default
-               else dt.date.today()))
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        bf_stcl = st.number_input(
-            "Brought-forward STCL", 0,
-            value=settings.get("brought_forward", {}).get("stcl", 0),
-            step=1000)
-    with c2:
-        bf_ltcl = st.number_input(
-            "Brought-forward LTCL", 0,
-            value=settings.get("brought_forward", {}).get("ltcl", 0),
-            step=1000)
-    with c3:
-        bf_hp_loss = st.number_input(
-            "Brought-forward HP loss", 0,
-            value=settings.get("brought_forward", {}).get("hp_loss", 0),
-            step=1000)
+               else min(dt.date.today(), _due)),
+        help=f"If the return is already filed, enter the ACTUAL filing date "
+             f"from the acknowledgement — that is what 234A/234F turn on. "
+             f"For an unfiled return this defaults to the due date "
+             f"({_due:%d-%m-%Y}) or today, whichever is earlier, so a "
+             f"still-timely return is not charged a late fee.")
+    if filing_date and filing_date > _due:
+        st.warning(
+            f"Filing on {filing_date:%d-%m-%Y} is after the "
+            f"{_due:%d-%m-%Y} due date — 234A interest and the 234F late fee "
+            "will be charged.")
+
+    _bf = settings.get("brought_forward", {}) or {}
+    st.markdown("**Brought-forward losses (Sec 71B / 72 / 73 / 74)**")
+    st.caption(
+        "One row per assessment year, because the carry-forward window runs "
+        "from the AY the loss was determined — 8 years for house property, "
+        "business and capital losses, 4 for speculation. The engine sets "
+        "them off oldest-first against the income each is allowed to touch, "
+        "reports what lapsed, and prints the losses table on the "
+        "computation sheet.")
+    _bf_seed = _bf.get("entries") or [
+        {"ay": "", "kind": k, "amount": _bf.get(src, 0)}
+        for k, src in (("house_property", "hp_loss"), ("business", "business"),
+                       ("speculation", "speculation"), ("stcl", "stcl"),
+                       ("ltcl", "ltcl")) if _bf.get(src)]
+    bf_df = st.data_editor(
+        _seed(_bf_seed, {"ay": "text", "kind": "text", "amount": "int"}),
+        num_rows="dynamic", key=f"bf_{key}",
+        column_config={
+            "ay": st.column_config.TextColumn(
+                "A.Y. of the loss", help="e.g. 2023-24. Leave blank only if "
+                                         "the year is genuinely unknown — a "
+                                         "blank row never expires."),
+            "kind": st.column_config.SelectboxColumn(
+                "Head", options=["house_property", "business", "speculation",
+                                 "stcl", "ltcl"]),
+            "amount": st.column_config.NumberColumn(
+                "Unabsorbed amount", min_value=0, step=1000),
+        })
+    # Legacy flat totals stay zero once per-AY rows exist, so nothing is
+    # counted twice.
+    bf_stcl = bf_ltcl = bf_hp_loss = 0
 
 
 def _collect() -> dict:
@@ -823,7 +956,9 @@ def _collect() -> dict:
             "savings_interest": int(os_savings), "fd_interest": int(os_fd),
             "dividend": int(os_div), "family_pension": int(os_fp),
             "taxable_gifts": int(os_gifts), "other": int(os_other),
-            "deductions_57": int(os_ded57)},
+            "deductions_57": int(os_ded57),
+            "post_office_savings_interest": int(os_po),
+            "post_office_joint_account": bool(os_po_joint)},
         "clubbing": _records(club_df, {
             "section": "64(1A)", "head": "other_sources", "amount": 0,
             "minor_child": False, "description": ""}),
@@ -840,9 +975,13 @@ def _collect() -> dict:
         "tds": _records(tds_df, {"tan": "", "deductor": "", "section": "",
                                  "amount": 0}),
         "challans": _records(ch_df, {"kind": "advance", "paid_on": None,
-                                     "amount": 0}),
-        "brought_forward": {"hp_loss": int(bf_hp_loss), "stcl": int(bf_stcl),
-                            "ltcl": int(bf_ltcl)},
+                                     "amount": 0, "reference": ""}),
+        "brought_forward": {
+            "hp_loss": int(bf_hp_loss), "stcl": int(bf_stcl),
+            "ltcl": int(bf_ltcl),
+            "entries": [r for r in _records(
+                bf_df, {"ay": "", "kind": "business", "amount": 0})
+                if r["amount"]]},
         "regime_election": regime_choice,
         "filing_date": filing_date.isoformat() if filing_date else None,
         # Imported books of accounts ride along untouched (the engine

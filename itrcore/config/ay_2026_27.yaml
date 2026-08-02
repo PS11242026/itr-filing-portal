@@ -142,6 +142,9 @@ exempt_income:                     # Schedule EI (reported, never taxed)
                                    # integration for rate purposes (both
                                    # regimes, Finance Act mechanism)
   itr1_agri_limit: 5000            # agri income above this bars ITR-1/4
+  post_office_savings_10_15:       # 10(15)(i) r/w Rule 2BBA — survives 115BAC
+    single: 3500
+    joint: 7000
 
 deductions:                        # Chapter VI-A caps; absent cap = as claimed
   "80C":        {cap: 150000, group: "80CCE"}
@@ -175,6 +178,14 @@ interest:
     - {by: "2025-12-15", pct: 75, grace_pct: 75}
     - {by: "2026-03-15", pct: 100, grace_pct: 100}
   senior_no_advance_tax_without_business: true
+  # First proviso to 234C(1): no interest on the June/Sept/Dec instalments
+  # for income nobody could estimate then — capital gains, winnings and
+  # dividend — provided the whole tax on it is paid by 15 March. Capital
+  # gains are always excluded; the dividend switch is here because it was
+  # only inserted by FA 2021 and a future AY may move again.
+  s234c_defer_dividend: true
+  s234c_deferment_tds_sections:    # TDS on that income leaves the base too
+    ["194", "194K", "194B", "194BB", "194BA", "194IA", "195"]
 
 late_fee_234f:
   amount: 5000

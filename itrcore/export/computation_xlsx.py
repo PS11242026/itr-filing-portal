@@ -16,12 +16,13 @@ import xlsxwriter
 INR_FMT = ('[>=100000]#\\,##\\,##0;'
            '[<=-100000][Red]-#\\,##\\,##0;#,##0')
 _ACCENT = "#1A5276"
-_HEADS = ("salary", "house_property", "business", "capital_gains",
-          "other_sources")
+_HEADS = ("salary", "house_property", "business", "speculation",
+          "capital_gains", "other_sources")
 _HEAD_TITLES = {
     "salary": "Salary",
     "house_property": "Income from house property",
     "business": "Profits & gains of business or profession",
+    "speculation": "Speculation business (Sec 43(5))",
     "capital_gains": "Capital gains",
     "other_sources": "Income from other sources",
 }
@@ -29,9 +30,28 @@ _COMP_HEAD_TITLES = {
     "salary": "SALARIES",
     "house_property": "INCOME FROM HOUSE PROPERTY",
     "business": "PROFITS & GAINS OF BUSINESS OR PROFESSION",
+    "speculation": "SPECULATION BUSINESS",
     "capital_gains": "CAPITAL GAINS",
     "other_sources": "INCOME FROM OTHER SOURCES",
 }
+
+
+_LOSS_LABELS = {
+    "house_property": "House Property Loss",
+    "business": "Ordinary Business Loss",
+    "speculation": "Speculation Business Loss",
+    "stcl": "Short Term Capital Loss",
+    "ltcl": "Long Term Capital Loss",
+}
+
+
+def _head_amount(head: dict) -> int:
+    """Head totals live under `amount` on a HeadResult but under `head_total`
+    on the capital-gains result — reading only `amount` is what printed
+    CAPITAL GAINS as zero on every statement."""
+    if "head_total" in head:
+        return int(head.get("head_total") or 0)
+    return int(head.get("amount") or 0)
 
 
 def _computation_sheet(wb, result: dict, *, regime_key: str,
@@ -91,14 +111,28 @@ def _computation_sheet(wb, result: dict, *, regime_key: str,
     for head_key in _HEADS:
         head = regime["heads"].get(head_key) or {}
         head_lines = head.get("lines", [])
-        if not head_lines and not head.get("amount"):
+        amount = _head_amount(head)
+        if not head_lines and not amount:
             continue
         ws.write(r, 0, _COMP_HEAD_TITLES[head_key], f_group)
         ws.write(r, 1, "", f_group)
         ws.write(r, 2, "", f_group)
-        ws.write_number(r, 3, head.get("amount", 0), f_total)
+        ws.write_number(r, 3, amount, f_total)
         r += 1
         for ln in head_lines:
+            ws.write(r, 0, ln["label"], f_cell)
+            ws.write(r, 1, ln["section"], f_cell)
+            ws.write_number(r, 2, ln["amount"], f_num)
+            r += 1
+    setoff_lines = regime.get("setoff_lines", [])
+    if setoff_lines:
+        ws.write(r, 0, "SET OFF & CARRY FORWARD OF LOSSES (SEC 70–74)",
+                 f_group)
+        ws.write(r, 1, "", f_group)
+        ws.write(r, 2, "", f_group)
+        ws.write(r, 3, "", f_group)
+        r += 1
+        for ln in setoff_lines:
             ws.write(r, 0, ln["label"], f_cell)
             ws.write(r, 1, ln["section"], f_cell)
             ws.write_number(r, 2, ln["amount"], f_num)
@@ -198,11 +232,29 @@ def _computation_sheet(wb, result: dict, *, regime_key: str,
         ws.write(r, 0, "LESS: TAX DEDUCTED AT SOURCE", f_cell)
         ws.write_number(r, 2, regime["tds_total"], f_num)
         r += 1
-    paid = regime["advance_tax_paid"] + regime["self_assessment_paid"]
-    if paid:
-        ws.write(r, 0, "LESS: ADVANCE TAX / SELF-ASSESSMENT TAX", f_cell)
-        ws.write_number(r, 2, paid, f_num)
+    challans = (inputs or {}).get("challans", [])
+
+    def _challan_block(kind: str, heading: str, total: int) -> None:
+        nonlocal r
+        if not total:
+            return
+        rows = [c for c in challans if (c.get("kind") or "advance") == kind]
+        ws.write(r, 0, heading, f_group)
         r += 1
+        for c in rows:
+            paid_on = str(c.get("paid_on") or "")
+            if len(paid_on) == 10:                      # ISO → dd/mm/yyyy
+                paid_on = f"{paid_on[8:]}/{paid_on[5:7]}/{paid_on[:4]}"
+            ref = " - ".join(x for x in (c.get("reference"), paid_on) if x)
+            ws.write(r, 0, ref or "Challan", f_cell)
+            ws.write_number(r, 1, int(c.get("amount", 0) or 0), f_num)
+            r += 1
+        ws.write(r, 0, "TOTAL", f_cell)
+        ws.write_number(r, 2, total, f_num)
+        r += 1
+
+    _challan_block("advance", "LESS: ADVANCE TAX",
+                   regime["advance_tax_paid"])
     for label, amount in (
             ("ADD: INTEREST U/S 234A", regime["interest_234a"]),
             ("ADD: INTEREST U/S 234B", regime["interest_234b"]),
@@ -212,11 +264,60 @@ def _computation_sheet(wb, result: dict, *, regime_key: str,
             ws.write(r, 0, label, f_cell)
             ws.write_number(r, 2, amount, f_num)
             r += 1
+    # Self-assessment tax sits BELOW the 288B-rounded payable, because it is
+    # paid against that rounded figure — exactly how the challan was raised.
+    if regime["self_assessment_paid"]:
+        ws.write(r, 0, "TAX PAYABLE (ROUNDED OFF U/S 288B)", f_total_lbl)
+        ws.write_number(r, 2, regime["payable_or_refund"]
+                        + regime["self_assessment_paid"], f_total)
+        r += 1
+        _challan_block("self_assessment", "LESS: SELF ASSESSMENT TAX U/S 140A",
+                       regime["self_assessment_paid"])
     payable = regime["payable_or_refund"]
     ws.write(r, 0, "TAX PAYABLE (ROUNDED OFF U/S 288B)" if payable >= 0
              else "REFUND DUE (ROUNDED OFF U/S 288B)", f_total_lbl)
     ws.write_number(r, 2, abs(payable), f_total)
     r += 2
+
+    # --- LOSSES TABLE: what came in, what was absorbed, what goes forward ---
+    loss_table = regime.get("loss_table", [])
+    if loss_table:
+        ws.merge_range(r, 0, r, 3, "LOSSES TABLE", f_center)
+        r += 1
+        ws.write_row(r, 0, ["A.Y. / Head", "Brought forward", "Set off",
+                            "Carried forward"], f_head)
+        r += 1
+        for row in loss_table:
+            kind = row.get("kind")
+            ws.write(r, 0, f"{row.get('ay') or '—'} · "
+                           f"{_LOSS_LABELS.get(kind, kind)}", f_cell)
+            ws.write_number(r, 1, row.get("brought_forward", 0), f_num)
+            ws.write_number(r, 2, row.get("set_off", 0), f_num)
+            ws.write_number(r, 3, row.get("carried_forward", 0), f_num)
+            r += 1
+            if row.get("lapsed"):
+                ws.write(r, 0, "   lapsed — carry-forward window closed",
+                         f_cell)
+                ws.write_number(r, 3, -row["lapsed"], f_num)
+                r += 1
+        r += 1
+
+    # --- capital-gains rate reconciliation (20% indexed vs 12.5% flat) ---
+    cg_reco = (regime["heads"].get("capital_gains") or {}).get("reco_lines",
+                                                               [])
+    if cg_reco:
+        ws.merge_range(r, 0, r, 3, "LONG-TERM CAPITAL GAIN — RATE OPTION "
+                       "RECONCILIATION", f_center)
+        r += 1
+        ws.write_row(r, 0, ["Particulars", "Section", "Tax"], f_head)
+        r += 1
+        for ln in cg_reco:
+            ws.write(r, 0, ln["label"], f_cell)
+            ws.write(r, 1, ln["section"], f_cell)
+            ws.write_number(r, 2, ln["amount"], f_num)
+            r += 1
+        r += 1
+
     ws.write(r, 0, f"Regime: {regime_key.upper()} · figures in ₹ · "
                    "prepared for review — validate in the ITD utility "
                    "before filing.", f_note)
@@ -337,7 +438,8 @@ def build(*, taxpayer_name: str, pan_masked: str, ay: str,
                 sh.write(rr, 1, ln["section"], f_cell)
                 sh.write_number(rr, 2, ln["amount"], f_num)
                 rr += 1
-        other = (list(regime.get("deduction_lines", []))
+        other = (list(regime.get("setoff_lines", []))
+                 + list(regime.get("deduction_lines", []))
                  + list(regime.get("special_tax_lines", []))
                  + list(regime.get("lines", [])))
         if other:

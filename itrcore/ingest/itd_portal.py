@@ -1232,6 +1232,9 @@ def pull_and_import(scope: TaxpayerScope, ay: str, client: ITDPortalClient,
         parsed = form26as_mod.parse_26as_text(pull.as26_text)
         counts["as26"] = importers_repo.import_26as(scope, ay,
                                                     parsed["entries"])
+        if parsed.get("challans"):
+            counts["challans"] = importers_repo.import_challans(
+                scope, ay, parsed["challans"])
 
     auditlog.log(scope.principal.username, "ITD_PORTAL_PULL",
                  entity="taxpayer", entity_id=scope.taxpayer_id,

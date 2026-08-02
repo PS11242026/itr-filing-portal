@@ -3,8 +3,16 @@ transfers).
 
 Covers: Sec 50C stamp-duty deeming (110% tolerance), 112A grandfathering
 (FMV 31-01-2018), the resident lower-of option for land/building acquired
-before 23-07-2024 (12.5% unindexed vs 20% indexed), intra-year and
-brought-forward loss set-offs.
+before 23-07-2024 (12.5% unindexed vs 20% indexed) and intra-head loss
+set-off (Sec 70/74 within the head).
+
+What this module deliberately does NOT do:
+
+* the ₹1,25,000 relief in Sec 112A(2) — that is a rate concession, not an
+  exclusion from total income. The gain belongs in GTI in full and only the
+  excess bears 12.5%, so the threshold is applied by the tax stage.
+* brought-forward losses and anything crossing a head boundary — that is
+  :mod:`itrcore.tax.setoff`, which must run after every head is known.
 
 Loss absorption order is deterministic and taxpayer-favorable (highest-rate
 buckets first); calibrate against the ITD utility via golden tests.
@@ -15,7 +23,7 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 
 from itrcore.tax.rounding import pct
-from itrcore.tax.types import BroughtForwardLosses, CGEntry, CGResult, Line
+from itrcore.tax.types import CGEntry, CGResult, Line
 
 
 def _fy_of(d: date) -> str:
@@ -43,12 +51,12 @@ def _indexed(amount: int, cii: dict, acq_fy: str, transfer_fy: str) -> int:
 
 
 def compute(entries: tuple[CGEntry, ...], cg_cfg: dict, *,
-            resident: bool,
-            brought_forward: BroughtForwardLosses) -> CGResult:
-    if not entries and not (brought_forward.stcl or brought_forward.ltcl):
+            resident: bool) -> CGResult:
+    if not entries:
         return CGResult(head_total=0)
 
     lines: list[Line] = []
+    reco: list[Line] = []
     stcg_slab = 0
     stcg_111a = 0
     pool_112a = 0
@@ -101,8 +109,9 @@ def compute(entries: tuple[CGEntry, ...], cg_cfg: dict, *,
                 lines.append(Line(f"{tag}: LTCG (112A pool)", "112A", gain))
             elif e.asset_class == "property":
                 use_20 = False
-                if (resident and gain > 0 and e.acquisition_date and cutoff
-                        and e.acquisition_date < cutoff):
+                eligible = (resident and gain > 0 and e.acquisition_date
+                            and cutoff and e.acquisition_date < cutoff)
+                if eligible:
                     acq_fy = _fy_of(e.acquisition_date)
                     t_fy = _fy_of(e.transfer_date)
                     indexed_cost = _indexed(cost, cii, acq_fy, t_fy)
@@ -111,9 +120,24 @@ def compute(entries: tuple[CGEntry, ...], cg_cfg: dict, *,
                     indexed_gain = max(0, (fvc - max(0, e.transfer_expenses)
                                            - indexed_cost - indexed_impr
                                            - exemption))
+                    rate_20 = cg_cfg["property_grandfather_indexed_rate"]
                     tax_125 = pct(gain, cg_cfg["ltcg_112_rate"])
-                    tax_20 = pct(indexed_gain,
-                                 cg_cfg["property_grandfather_indexed_rate"])
+                    tax_20 = pct(indexed_gain, rate_20)
+                    # The proviso to Sec 112(1) lets a resident individual/HUF
+                    # pay the LOWER of the two on land or building acquired
+                    # before 23-07-2024. Both sides are printed so the choice
+                    # is auditable rather than silent.
+                    reco.extend([
+                        Line(f"{tag}: option A — {cg_cfg['ltcg_112_rate']}% "
+                             f"without indexation on ₹{gain:,}", "112",
+                             tax_125),
+                        Line(f"{tag}: option B — {rate_20}% with indexation "
+                             f"(indexed cost ₹{indexed_cost:,}) on "
+                             f"₹{indexed_gain:,}", "112", tax_20),
+                        Line(f"{tag}: lower of the two adopted — "
+                             f"{'B' if tax_20 < tax_125 else 'A'} "
+                             f"(saves ₹{abs(tax_20 - tax_125):,})", "112",
+                             min(tax_20, tax_125))])
                     if tax_20 < tax_125:
                         use_20 = True
                         pool_20 += indexed_gain
@@ -121,15 +145,29 @@ def compute(entries: tuple[CGEntry, ...], cg_cfg: dict, *,
                             f"{tag}: grandfathered option — 20% on indexed "
                             f"gain ₹{indexed_gain:,} beats 12.5% on "
                             f"₹{gain:,}", "112", indexed_gain))
+                elif gain > 0 and not resident:
+                    reco.append(Line(
+                        f"{tag}: the 20%-with-indexation option in the "
+                        "proviso to Sec 112(1) is open only to a RESIDENT "
+                        "individual/HUF — taxed at 12.5% unindexed", "112",
+                        pct(gain, cg_cfg["ltcg_112_rate"])))
                 if not use_20:
                     pool_125 += gain
                     lines.append(Line(f"{tag}: LTCG at 12.5% (unindexed)",
                                       "112", gain))
+                if e.buyer_name or e.buyer_pan:
+                    lines.append(Line(
+                        f"{tag}: buyer {e.buyer_name or '—'}"
+                        + (f" (PAN {e.buyer_pan})" if e.buyer_pan else ""),
+                        "CG", 0))
             else:
                 pool_125 += gain
                 lines.append(Line(f"{tag}: LTCG at 12.5%", "112", gain))
         else:
-            if e.asset_class == "listed_equity_stt":
+            # Sec 111A covers equity shares AND units of an equity-oriented
+            # fund on which STT is paid — a debt/liquid fund is `listed_other`
+            # or `other` and falls to the slab.
+            if e.asset_class in ("listed_equity_stt", "equity_mf"):
                 stcg_111a += gain
                 lines.append(Line(f"{tag}: STCG (111A)", "111A", gain))
             else:
@@ -165,41 +203,17 @@ def compute(entries: tuple[CGEntry, ...], cg_cfg: dict, *,
     cf_stcl = absorb(stcl, ["stcg_slab", "stcg_111a", "20", "125", "112a"],
                      values)
 
-    # brought-forward losses
-    bf_stcl_left = absorb(max(0, brought_forward.stcl),
-                          ["stcg_slab", "stcg_111a", "20", "125", "112a"],
-                          values)
-    bf_ltcl_left = absorb(max(0, brought_forward.ltcl),
-                          ["20", "125", "112a"], values)
-    cf_stcl += bf_stcl_left
-    cf_ltcl += bf_ltcl_left
-    if brought_forward.stcl or brought_forward.ltcl:
-        lines.append(Line("Brought-forward losses applied", "74",
-                          -(brought_forward.stcl - bf_stcl_left
-                            + brought_forward.ltcl - bf_ltcl_left)))
-
-    # 112A exemption applies to the netted pool
-    taxable_112a = max(0, values["112a"]
-                       - cg_cfg["ltcg_112a_exemption"])
-    if values["112a"] > 0:
-        lines.append(Line(
-            f"112A exemption on first "
-            f"₹{cg_cfg['ltcg_112a_exemption']:,}", "112A",
-            -min(values["112a"], cg_cfg["ltcg_112a_exemption"])))
-
-    head_total = (values["stcg_slab"] + values["stcg_111a"] + taxable_112a
+    # Brought-forward capital losses are applied by itrcore.tax.setoff, after
+    # every head is known — current-year losses must be exhausted first.
+    head_total = (values["stcg_slab"] + values["stcg_111a"] + values["112a"]
                   + values["125"] + values["20"])
-    if cf_stcl or cf_ltcl:
-        lines.append(Line(
-            f"Losses carried forward: STCL ₹{cf_stcl:,}, LTCL ₹{cf_ltcl:,}",
-            "74", 0))
     lines.append(Line("Taxable capital gains", "45", head_total))
 
     return CGResult(head_total=head_total,
                     stcg_slab=values["stcg_slab"],
                     stcg_111a=values["stcg_111a"],
-                    ltcg_112a_taxable=taxable_112a,
+                    ltcg_112a=values["112a"],
                     ltcg_125=values["125"],
                     ltcg_20_indexed=values["20"],
                     cf_stcl=cf_stcl, cf_ltcl=cf_ltcl,
-                    lines=tuple(lines))
+                    lines=tuple(lines), reco_lines=tuple(reco))

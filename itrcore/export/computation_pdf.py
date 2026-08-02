@@ -96,15 +96,16 @@ def build(*, taxpayer_name: str, pan_masked: str, ay: str,
              new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 8)
     regime = result[result["recommended"]]
-    for head_key in ("salary", "house_property", "capital_gains",
-                     "other_sources"):
+    for head_key in ("salary", "house_property", "business", "speculation",
+                     "capital_gains", "other_sources"):
         head = regime["heads"].get(head_key) or {}
         for ln in head.get("lines", []):
             label = f"[{ln['section']}] {ln['label']}"
             pdf.cell(140, 5, _t(label[:88]), border=0)
             pdf.cell(42, 5, rs(ln["amount"]), border=0, align="R",
                      new_x="LMARGIN", new_y="NEXT")
-    for ln in (list(regime.get("deduction_lines", []))
+    for ln in (list(regime.get("setoff_lines", []))
+               + list(regime.get("deduction_lines", []))
                + list(regime.get("special_tax_lines", []))
                + list(regime.get("lines", []))):
         pdf.cell(140, 5, _t(f"[{ln['section']}] {ln['label']}"[:88]), border=0)

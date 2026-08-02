@@ -37,3 +37,24 @@ Streamlit 1.59 + SQLite portal for individual ITR prep/filing
   `itrcore/db/repos/transactions.py::TERMINAL_LABELS`.
 - The readiness gate (`itrcore/analysis/gate.py`) is the single
   authority on what blocks filing.
+- `itrcore/tax/setoff.py` is the single authority on losses (Sec 70–74):
+  no head module may set a loss off against another head, and brought-
+  forward losses are applied only there. Head modules return their own
+  income in isolation.
+- The ₹1.25L in Sec 112A(2) is a RATE concession, not an exclusion from
+  total income — apply it in the tax stage, never in `capital_gains.py`.
+- `tests/golden/cases/case_*.yaml` calibrate the engine against ten real
+  practitioner-software computations (AY 2026-27; the source PDFs live in
+  `ITR filing data/changes`, which is gitignored). They must match to the
+  rupee; if one breaks, the engine is wrong until proven otherwise. The
+  cases are ANONYMISED — identity, DOB, address, employer/bank names and
+  challan numbers are neutral stand-ins, and the DOB stand-in preserves
+  the senior-citizen age band. Keep them that way: the repo is public.
+- Advance tax / self-assessment tax come ONLY from **AIS Part B3**. The
+  post-AY-2023-24 TRACES 26AS (Parts I–X) has no tax-paid part at all —
+  its Part VII says "refer AIS". B3 is a flat `columnLabel`/`columnData`
+  table with no `l2`, so the main row walk must skip it explicitly.
+- A challan is reported in the AIS of the year it was PAID but discharges
+  the year its own `Financial Year` column names. Match on that, never on
+  the deposit date, and scan every stored AY — self-assessment tax for
+  AY X paid in July appears only in the AY X+1 AIS.

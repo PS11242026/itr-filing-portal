@@ -1,0 +1,68 @@
+# AY 2026-27 engine calibration -- case 2 of 10.
+# Sec 71(2A): an F&O loss eats other sources and capital gains but never
+# salary. The speculation loss is ring-fenced by Sec 73 and carried forward
+# on its own, as are five earlier years' business losses.
+#
+# Expected values are read off a practitioner-software computation for a
+# real return. The assessee's identity, date of birth, address, employer
+# and bank names and challan numbers are replaced with neutral stand-ins
+# that preserve the tax behaviour exactly -- the DOB stand-in keeps the
+# same senior-citizen age band, which drives the slabs and the 234B/234C
+# waiver. Every rupee figure is untouched: that is what is being pinned.
+name: case_business_loss_not_against_salary
+verified_against_utility: false
+inputs:
+  ay: "2026-27"
+  personal: {dob: "1985-01-01", resident_status: Resident}
+  regime_election: new
+  filing_date: "2026-07-24"
+  salaries:
+    - employer_name: Employer A
+      employer_tan: MUMA08396D
+      gross_salary: 7318953
+  regular_businesses:
+    - {name: Proprietor, net_profit_before_tax: -285914}
+    - {name: Speculation business, net_profit_before_tax: -11,
+       is_speculative: true, turnover: 22981}
+  capital_gains:
+    - asset_class: listed_equity_stt
+      description: Listed equity (STT paid) — net short-term
+      acquisition_date: "2025-06-10"
+      transfer_date: "2026-03-27"
+      full_value_consideration: 81719
+      cost_of_acquisition: 79693
+    - asset_class: equity_mf
+      description: Equity funds/shares — net long-term
+      acquisition_date: "2024-04-01"
+      transfer_date: "2026-02-26"
+      full_value_consideration: 13626
+      cost_of_acquisition: 10044
+  other_sources:
+    savings_interest: 4559
+    fd_interest: 11473
+    dividend: 861
+    other: 270
+  brought_forward:
+    entries:
+      - {ay: "2021-22", kind: business, amount: 3258144}
+      - {ay: "2022-23", kind: business, amount: 98910}
+      - {ay: "2023-24", kind: business, amount: 266674}
+      - {ay: "2023-24", kind: speculation, amount: 4862}
+      - {ay: "2025-26", kind: speculation, amount: 255}
+  tds:
+    - {tan: MUMA08396D, deductor: Employer A, section: "192",
+       amount: 2005644}
+    - {tan: MUMP00111P, deductor: Debenture issuer A, section: "193",
+       amount: 26}
+expected:
+  new:
+    gti: 7243953
+    total_income: 7243950
+    slab_tax: 1753185
+    tds_total: 2005670
+    interest_234a: 0
+    interest_234b: 0
+    interest_234c: 0
+    fee_234f: 0
+    payable_or_refund: -30
+    speculation_income: 0

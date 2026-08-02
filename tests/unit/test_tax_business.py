@@ -11,7 +11,11 @@ CFG = load_cfg("2026-27").raw["presumptive"]
 
 
 def _head(*businesses):
-    return business.compute(businesses, (), CFG)
+    return business.compute(businesses, (), CFG)[0]     # ordinary bucket
+
+
+def _spec(*regular):
+    return business.compute((), regular, CFG)[1]        # speculation bucket
 
 
 def test_44ad_digital_and_cash_rates():

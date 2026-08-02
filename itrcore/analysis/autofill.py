@@ -34,6 +34,7 @@ from itrcore.ingest import cg_excel
 
 _CATEGORY_LABELS = {
     "interest_savings": "Savings interest",
+    "interest_post_office": "Post office savings interest",
     "interest_deposits": "Deposit interest",
     "interest_others": "Interest — others (incl. I-T refund)",
     "dividend": "Dividend",
@@ -44,7 +45,8 @@ _CATEGORY_LABELS = {
     "sale_securities": "Securities sale",
     "sale_immovable": "Immovable-property sale",
 }
-_INTEREST_CATEGORIES = ("interest_savings", "interest_deposits", "dividend")
+_INTEREST_CATEGORIES = ("interest_savings", "interest_post_office",
+                        "interest_deposits", "dividend")
 # AIS "other income" tab categories that land in the OS 'other' field.
 _OTHER_FIELD_CATEGORIES = ("interest_others", "other_income")
 
@@ -147,6 +149,157 @@ def _prior_carryforward(scope: TaxpayerScope,
     return {"stcl": int(cg.get("cf_stcl", 0) or 0),
             "ltcl": int(cg.get("cf_ltcl", 0) or 0),
             "hp_loss": int(reg.get("hp_loss_carried_forward", 0) or 0)}
+
+
+def _next_ay(ay: str) -> str:
+    try:
+        start = int(str(ay).split("-")[0])
+    except (ValueError, IndexError):
+        return "the next"
+    return f"{start + 1}-{str(start + 2)[2:]}"
+
+
+def _suppressed_tds_notes(scope: TaxpayerScope, ay: str) -> list[str]:
+    """Interest/dividend rows the AIS reported only through Part B1 (TDS)
+    while Part B2 (SFT) also covered that bucket. The SFT feed wins — that is
+    what stops the same deposit being counted twice — but a payer who reports
+    ONLY through TDS would then be missing, so say so out loud."""
+    saved = importers_repo.get_ais_document(scope, ay)
+    if not saved or not saved.get("doc"):
+        return []
+    from itrcore.ingest import ais as ais_mod
+    try:
+        doc = ais_mod.document_from_dict(saved["doc"])
+    except (TypeError, ValueError, KeyError):
+        return []
+    notes = []
+    for r in doc.dropped_tds_rows():
+        if r.bucket not in _INTEREST_CATEGORIES or r.amount_paise <= 0:
+            continue
+        notes.append(
+            f"AIS: {_CATEGORY_LABELS.get(r.bucket, r.bucket)} of "
+            f"₹{_r(r.amount_paise):,} from {r.source} was reported under "
+            f"Part B1 (TDS) only and is NOT in the imported total — the SFT "
+            "feed decides that bucket. Add it as an adjustment line if this "
+            "payer is genuinely separate from the SFT-reported ones.")
+    return notes
+
+
+def _imported_challans(scope: TaxpayerScope, ay: str,
+                       follow_ups: list[str]) -> list[dict]:
+    """Advance / self-assessment challans the ITD reported.
+
+    Two sources, because the statement layout changed: the AIS **Part B3
+    'Payment of Taxes'** is authoritative today, while PART-C of an older
+    Form 26AS still carries them for statements downloaded before the
+    AY 2023-24 redesign (the current TRACES 26AS has no tax-paid part at
+    all — its Part VII says in terms "for other details refer AIS")."""
+    out: list[dict] = []
+    from itrcore.ingest import ais as ais_mod
+    from itrcore.ingest import form26as_pdf
+
+    # Scan EVERY stored AIS, not just this AY's: a challan is reported in the
+    # AIS of the year it was paid but discharges the year it relates to, so
+    # self-assessment tax for this AY paid after 31 March is only ever found
+    # in the following year's document.
+    seen_ays: set[str] = set()
+    other_years: list = []
+    stale: list[str] = []
+    for saved in importers_repo.list_ais_documents(scope):
+        try:
+            doc = ais_mod.document_from_dict(saved["doc"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        seen_ays.add(saved["ay"])
+        # A document stored before Part B3 was parsed has no tax_payments KEY
+        # at all (as against an empty list, which means "parsed, none found").
+        # It cannot self-heal — the challans are only in the raw AIS file.
+        if "tax_payments" not in saved["doc"]:
+            stale.append(saved["ay"])
+            continue
+        mine, others = ais_mod.challans_for_ay(doc, ay)
+        out.extend(mine)
+        other_years.extend(others)
+    for stale_ay in stale:
+        follow_ups.append(
+            f"The stored AY {stale_ay} AIS was imported before Part B3 "
+            "(Payment of Taxes) was read, so any advance / self-assessment "
+            "tax in it is missing. Re-pull that AIS on the Data import page "
+            "to pick the challans up.")
+    for p in other_years:
+        if any(c.get("reference") == f"{p.bsr_code} - {p.challan_serial}"
+               for c in out):
+            continue
+        follow_ups.append(
+            f"AIS: a {p.minor_head or 'tax'} challan of "
+            f"₹{_r(p.amount_paise):,} deposited {p.deposit_date} belongs to "
+            f"AY {p.ay or '—'}, not AY {ay} — NOT credited here. Check it was "
+            "claimed in that year's return.")
+    if seen_ays and not any(c["kind"] == "self_assessment" for c in out):
+        nxt = _next_ay(ay)
+        follow_ups.append(
+            f"No self-assessment tax for AY {ay} was found. Since the AIS "
+            "reports a challan in the year it was PAID, tax paid after "
+            f"31 March {ay[:4]} appears only in the AY {nxt} AIS — pull that "
+            f"one and it will be picked up here automatically. Until then, if "
+            "the client has paid, add the challan under **TDS · TCS & taxes "
+            "paid** or the computation will show tax payable that is already "
+            "settled.")
+
+    saved_26as = importers_repo.get_26as_document(scope, ay)
+    if saved_26as and saved_26as.get("doc"):
+        try:
+            doc26 = form26as_pdf.document_from_dict(saved_26as["doc"])
+        except (TypeError, ValueError):
+            doc26 = None
+        if doc26 is not None:
+            out.extend(form26as_pdf.challans_for_computation(doc26))
+
+    # PART-C of the TRACES text/CSV export, which persists no document.
+    out.extend(importers_repo.list_challans(scope, ay))
+    return out
+
+
+def _challan_key(c: dict) -> tuple:
+    return (str(c.get("kind") or "advance"), str(c.get("paid_on") or ""),
+            int(c.get("amount") or 0))
+
+
+def _challan_label(c: dict) -> str:
+    kind = ("Self-assessment tax u/s 140A"
+            if c.get("kind") == "self_assessment" else "Advance tax")
+    ref = str(c.get("reference") or "").strip()
+    parts = [kind, str(c.get("paid_on") or "")]
+    if ref:
+        parts.append(f"({ref})")
+    return " ".join(p for p in parts if p)
+
+
+def _merge_challans(existing: list[dict], imported: list[dict],
+                    sources: list) -> list[dict]:
+    """Imported challans are added; one already on file with the same
+    kind/date/amount is the same payment and is kept as typed, so a
+    re-import never doubles a credit.
+
+    EVERY challan gets a source note, not just the newly added ones —
+    otherwise a credit imported on the first auto-fill silently disappears
+    from the summary on the second, and the practitioner has no evidence it
+    was picked up at all."""
+    out = [dict(c) for c in existing]
+    seen = {_challan_key(c) for c in out}
+    imported_keys = set()
+    for c in imported:
+        imported_keys.add(_challan_key(c))
+        if _challan_key(c) in seen:
+            continue
+        out.append(c)
+        seen.add(_challan_key(c))
+    for c in out:
+        origin = ("Form 26AS / AIS Part B3" if _challan_key(c) in imported_keys
+                  else "Manual entry (kept)")
+        sources.append(SourceNote("Taxes paid", _challan_label(c),
+                                  int(c.get("amount", 0) or 0), origin))
+    return out
 
 
 def assemble(scope: TaxpayerScope, ay: str, *,
@@ -407,6 +560,16 @@ def assemble(scope: TaxpayerScope, ay: str, *,
     other_sources = {
         "savings_interest": _pick("interest_savings",
                                   os_base.get("savings_interest", 0)),
+        # Kept apart from bank savings interest so the engine can claim the
+        # ₹3,500 / ₹7,000 exemption u/s 10(15)(i) that only this interest
+        # gets — the AIS files it under the same category as any bank's, so
+        # the split is made from the payer (CPRC Chennai / Department of
+        # Posts) at classification time.
+        "post_office_savings_interest": _pick(
+            "interest_post_office",
+            os_base.get("post_office_savings_interest", 0)),
+        "post_office_joint_account": os_base.get(
+            "post_office_joint_account", False),
         "fd_interest": _pick("interest_deposits",
                              os_base.get("fd_interest", 0)),
         "dividend": _pick("dividend", os_base.get("dividend", 0)),
@@ -416,6 +579,8 @@ def assemble(scope: TaxpayerScope, ay: str, *,
         "other": other_val}
     if any(c in tis_totals or c in ais_totals for c in _INTEREST_CATEGORIES):
         filled.append("Interest & dividend")
+    for note in _suppressed_tds_notes(scope, ay):
+        follow_ups.append(note)
     if other_parts or _best("family_pension") is not None:
         filled.append("Other income")
 
@@ -540,6 +705,14 @@ def assemble(scope: TaxpayerScope, ay: str, *,
         sources.append(SourceNote("Other sources", "Taxable gifts 56(2)(x)",
                                   int(other_sources["taxable_gifts"]),
                                   "Manual entry (kept)"))
+    # -- PART-C of 26AS: advance tax and self-assessment tax paid by the
+    # assessee himself. These are a tax CREDIT, not income, and without them
+    # the computation shows a payable the client has already settled — and
+    # charges 234B/234C interest on money that was paid on time.
+    challans = _merge_challans(base.get("challans", []),
+                               _imported_challans(scope, ay, follow_ups),
+                               sources)
+
     # Manual head/subhead adjustments ride through untouched — imports
     # never overwrite a practitioner's add/less lines.
     adjustments = [dict(a) for a in base.get("adjustments", [])]
@@ -566,7 +739,7 @@ def assemble(scope: TaxpayerScope, ay: str, *,
         "deductions": base.get("deductions", []),
         "adjustments": adjustments,
         "tds": tds,
-        "challans": base.get("challans", []),
+        "challans": challans,
         "brought_forward": brought_forward,
         "regime_election": base.get("regime_election", "auto"),
         "filing_date": base.get("filing_date"),

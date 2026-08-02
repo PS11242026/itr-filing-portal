@@ -3,7 +3,7 @@
 import dataclasses
 from datetime import date
 
-from itrcore.tax.types import (AdjustmentEntry, AssessmentInputs,
+from itrcore.tax.types import (AdjustmentEntry, AssessmentInputs, BFLossEntry,
                                BroughtForwardLosses, CGEntry, Challan,
                                ClubbedIncome, ExemptIncomeEntry,
                                HouseProperty, OtherSources, PersonalInfo,
@@ -37,6 +37,19 @@ def _d(value) -> date | None:
     return date.fromisoformat(value)
 
 
+def _brought_forward(d: dict) -> BroughtForwardLosses:
+    """Tolerant of both shapes: the original flat totals and the per-AY rows
+    added with the losses table. Unknown keys are dropped rather than
+    raising, so an input saved by a newer build still loads."""
+    known = {f for f in ("hp_loss", "stcl", "ltcl", "business", "speculation")}
+    return BroughtForwardLosses(
+        **{k: int(v or 0) for k, v in d.items() if k in known},
+        entries=tuple(BFLossEntry(ay=str(e.get("ay") or ""),
+                                  kind=e.get("kind") or "business",
+                                  amount=int(e.get("amount") or 0))
+                      for e in d.get("entries", [])))
+
+
 def inputs_from_dict(d: dict) -> AssessmentInputs:
     return AssessmentInputs(
         ay=d["ay"],
@@ -67,7 +80,6 @@ def inputs_from_dict(d: dict) -> AssessmentInputs:
         challans=tuple(
             Challan(**{**c, "paid_on": _d(c.get("paid_on"))})
             for c in d.get("challans", [])),
-        brought_forward=BroughtForwardLosses(
-            **d.get("brought_forward", {})),
+        brought_forward=_brought_forward(d.get("brought_forward", {})),
         regime_election=d.get("regime_election", "auto"),
         filing_date=_d(d.get("filing_date")))

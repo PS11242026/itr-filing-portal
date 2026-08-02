@@ -50,23 +50,38 @@ def s234b(assessed_tax: int, paid_by_fy_end: int, filing_date: date | None,
 
 
 def s234c(assessed_tax: int, challans: tuple[Challan, ...],
-          schedule: list[dict], rate_pm: float, threshold: int) -> int:
+          schedule: list[dict], rate_pm: float, threshold: int, *,
+          assessed_tax_undeferrable: int | None = None) -> int:
+    """Interest for deferment of advance tax.
+
+    ``assessed_tax_undeferrable`` is the assessed tax recomputed WITHOUT the
+    income the first proviso to Sec 234C(1) excuses — capital gains, winnings,
+    dividend and a newly set-up business — and without the tax deducted on it.
+    Nobody can estimate those in June, so the first three instalments are
+    tested against that reduced figure; the 15-March instalment is tested
+    against the full one, which is the proviso's condition that the whole tax
+    on such income be paid in the remaining instalments.
+    """
     if assessed_tax < threshold:
         return 0
+    reduced = (assessed_tax if assessed_tax_undeferrable is None
+               else max(0, assessed_tax_undeferrable))
     total = 0
+    last = len(schedule) - 1
     for idx, inst in enumerate(schedule):
         by = date.fromisoformat(inst["by"])
-        due_cum = pct(assessed_tax, inst["pct"])
+        base = assessed_tax if idx == last else reduced
+        due_cum = pct(base, inst["pct"])
         paid_cum = sum(c.amount for c in challans
                        if c.kind == "advance" and c.paid_on
                        and c.paid_on <= by)
-        grace_cum = pct(assessed_tax, inst.get("grace_pct", inst["pct"]))
+        grace_cum = pct(base, inst.get("grace_pct", inst["pct"]))
         if paid_cum >= grace_cum:
             continue
         shortfall = due_cum - paid_cum
         if shortfall <= 0:
             continue
-        months = 1 if idx == len(schedule) - 1 else 3
+        months = 1 if idx == last else 3
         total += pct(r100_floor(shortfall) * months, rate_pm)
     return total
 
