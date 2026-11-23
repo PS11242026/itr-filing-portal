@@ -1151,6 +1151,11 @@ class SeleniumFilingClient:
 
     def upload(self, *, pan: str, password: str, ay: str,
                json_path: str) -> tuple[str, ...]:
+        from itrcore import demo
+        if demo.is_demo():
+            raise PortalError("Browser-driven filing on the live ITD portal "
+                              "is disabled in the public demo. Download the "
+                              "generated JSON instead.")
         if not pan or not password:
             raise PortalError("the client's PAN and stored e-filing "
                               "password are required.")
@@ -1185,7 +1190,11 @@ def default_client() -> ITDPortalClient:
     """The client the app uses today: the LIVE, browser-driven client. It
     pre-fills PAN + password and drives the downloads; the human does only the
     CAPTCHA/OTP. Swap to :class:`MockITDPortalClient` here for an offline
-    walkthrough (its data is labelled MOCK)."""
+    walkthrough (its data is labelled MOCK). The public demo always uses the
+    mock."""
+    from itrcore import demo
+    if demo.is_demo():
+        return MockITDPortalClient()
     return SeleniumITDPortalClient()
 
 

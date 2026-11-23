@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import streamlit as st
 
+from itrcore import demo
 from itrcore.authz import Principal, TaxpayerScope, mint_scope
 from itrcore.db.repos import taxpayers as taxpayers_repo
 from itrcore.db.repos import users as users_repo
@@ -44,6 +45,9 @@ def generate_password(length: int = 12) -> str:
 
 def render_login() -> None:
     st.title(APP_NAME)
+    if demo.is_demo():
+        _render_demo_login()
+        return
     if users_repo.user_count() == 0:
         _render_bootstrap()
         return
@@ -61,6 +65,32 @@ def render_login() -> None:
                 st.session_state[SESSION_KEY] = AuthContext(
                     principal=result.principal,
                     must_change_pw=result.must_change_pw)
+                st.rerun()
+
+
+def _render_demo_login() -> None:
+    """One-click sign-in for the public demo. There is no password form, so
+    visitors cannot lock the shared accounts out with failed attempts."""
+    st.info("**Public demo** — every taxpayer, PAN, bank account and figure "
+            "here is fictional. Changes are shared with other visitors and "
+            "reset when the app restarts. Please don't upload real documents.")
+    st.caption("Choose a role to explore:")
+    for username, password, role, blurb in demo.DEMO_ACCOUNTS:
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            clicked = st.button(f"Enter as {role}", key=f"demo_{username}",
+                                type="primary" if role == "Partner" else
+                                "secondary", width="stretch")
+        with col2:
+            st.markdown(f"**{username}** — {blurb}")
+        if clicked:
+            result = users_repo.authenticate(username, password)
+            if result is None:
+                st.error("This demo account is unavailable — the app will "
+                         "reset on its next restart.")
+            else:
+                st.session_state[SESSION_KEY] = AuthContext(
+                    principal=result.principal, must_change_pw=False)
                 st.rerun()
 
 
@@ -118,28 +148,33 @@ def render_sidebar_chrome(ctx: AuthContext) -> None:
                    f"({ctx.principal.role})")
         if ctx.is_staff:
             _render_taxpayer_switcher(ctx)
-        with st.expander("🔑 Change my password"):
-            with st.form("self_pw_change", clear_on_submit=True):
-                old = st.text_input("Current password", type="password")
-                pw1 = st.text_input("New password (min 8 chars)",
-                                    type="password")
-                pw2 = st.text_input("Confirm new password",
-                                    type="password")
-                if st.form_submit_button("Change password"):
-                    if pw1 != pw2:
-                        st.error("Passwords do not match.")
-                    else:
-                        try:
-                            users_repo.change_password(ctx.principal,
-                                                       old, pw1)
-                        except ValueError as exc:
-                            st.error(str(exc))
-                        else:
-                            st.success("Password changed — use it from "
-                                       "your next sign-in.")
+        if demo.is_demo():
+            st.caption("🧪 Public demo · fictional data")
+        else:
+            _render_self_password_change(ctx)
         if st.button("Sign out", width="stretch"):
             sign_out()
         st.caption(f"{APP_NAME} · v{__version__} · AY 2026-27")
+
+
+def _render_self_password_change(ctx: AuthContext) -> None:
+    with st.expander("🔑 Change my password"):
+        with st.form("self_pw_change", clear_on_submit=True):
+            old = st.text_input("Current password", type="password")
+            pw1 = st.text_input("New password (min 8 chars)",
+                                type="password")
+            pw2 = st.text_input("Confirm new password", type="password")
+            if st.form_submit_button("Change password"):
+                if pw1 != pw2:
+                    st.error("Passwords do not match.")
+                else:
+                    try:
+                        users_repo.change_password(ctx.principal, old, pw1)
+                    except ValueError as exc:
+                        st.error(str(exc))
+                    else:
+                        st.success("Password changed — use it from "
+                                   "your next sign-in.")
 
 
 def _render_taxpayer_switcher(ctx: AuthContext) -> None:

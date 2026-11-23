@@ -16,5 +16,5 @@ for /f "tokens=5" %%p in ('netstat -ano ^| findstr :8511 ^| findstr LISTENING') 
 )
 
 echo Starting the portal at http://localhost:8511 ...
-".venv\Scripts\python.exe" -m streamlit run app.py
+".venv\Scripts\python.exe" -m streamlit run app.py --server.address localhost --server.port 8511
 pause

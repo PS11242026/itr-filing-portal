@@ -6,6 +6,7 @@ import hmac
 import os
 from datetime import datetime, timedelta
 
+from itrcore import demo
 from itrcore.authz import ALL_ROLES, Principal, require_staff
 from itrcore.db import auditlog, connection
 from itrcore.models import AuthUser
@@ -125,6 +126,7 @@ def authenticate(username: str, password: str) -> AuthUser | None:
 def change_password(principal: Principal, old_password: str,
                     new_password: str) -> None:
     """Self-service password change (also clears must_change_pw)."""
+    demo.forbid_in_demo("Changing passwords")
     row = connection.query_one("SELECT * FROM users WHERE id=? AND active=1",
                                (principal.user_id,))
     if row is None or not verify_password(old_password or "", row["pw_hash"]):
@@ -143,6 +145,7 @@ def reset_password(principal: Principal, user_id: int,
                    new_password: str) -> None:
     """Staff reset (target must change it on next login)."""
     require_staff(principal, "Manager", "Resetting passwords")
+    demo.forbid_in_demo("Resetting passwords")
     if len(new_password or "") < MIN_PASSWORD_LEN:
         raise ValueError(f"password must be at least {MIN_PASSWORD_LEN} "
                          "characters")
@@ -156,6 +159,7 @@ def reset_password(principal: Principal, user_id: int,
 
 def set_active(principal: Principal, user_id: int, active: bool) -> None:
     require_staff(principal, "Partner", "Activating/deactivating users")
+    demo.forbid_in_demo("Activating/deactivating users")
     row = connection.query_one(
         "SELECT id, username, role, active FROM users WHERE id=?",
         (user_id,))
