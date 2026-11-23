@@ -1,5 +1,9 @@
 # ITR Filing Portal
 
+**[▶ Live demo](https://ps-itr.streamlit.app/)**: fictional data, one-click
+sign-in as partner, staff or client (runs with `ITR_PORTAL_DEMO=1`; resets on
+restart).
+
 Internal + client-facing portal for individual income-tax return
 preparation and filing (AY 2026-27, **ITR-1/2/3/4** — salary, house
 property, capital gains, presumptive & regular-books business income, other
